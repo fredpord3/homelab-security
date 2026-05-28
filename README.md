@@ -4,10 +4,10 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 
 ## Infrastructure
 
-- **Hypervisor:** Proxmox VE on bare metal
+- **Hypervisor:** Proxmox VE on ASRock desktop
+- **SIEM:** Wazuh 4.14.5 on Ubuntu Server (laptop)
 - **Network:** Ubiquiti Dream Router 7 (WPA2/WPA3)
-- **SIEM:** Wazuh 4.14.5 on Ubuntu Server
-- **Switch:** Ubiquiti (managed, arriving soon)
+- **Switch:** Ubiquiti Lite 8 PoE (managed)
 
 ## What's Running
 
