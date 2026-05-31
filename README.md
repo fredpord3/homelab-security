@@ -4,10 +4,11 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 
 ## Infrastructure
 
-- **Hypervisor:** Proxmox VE on ASRock desktop
-- **SIEM:** Wazuh 4.14.5 on Ubuntu Server (laptop)
-- **Network:** Ubiquiti Dream Router 7 (WPA2/WPA3)
-- **Switch:** Ubiquiti Lite 8 PoE (managed)
+- **Hypervisor:** Proxmox VE on ASRock desktop — Lab VLAN 20 (192.168.20.10)
+- **SIEM:** Wazuh 4.14.5 on Ubuntu Server (laptop) — Lab VLAN 20 pending wired connection (192.168.20.20 reserved)
+- **Gateway:** Ubiquiti Dream Router 7 — FP (WPA2/WPA3, segmented VLANs)
+- **Switch:** Ubiquiti USW Lite 8 PoE (managed, adopted)
+
 
 ## What's Running
 
@@ -16,16 +17,33 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Kali Linux VM
 - Vulnerable target machines for practice
 
+
 ## Hardening Completed
 
-### Network
-- Confirmed zero WAN port forwards
-- UPnP disabled
-- Firmware updated to latest
-- WPA2/WPA3 enforced
-- VLAN segmentation in progress (managed switch arriving)
+### Network — Gateway (Dream Router 7)
+
+- UniFi OS and Network application updated to latest
+- Local backup admin created (Super Admin role, local access only — no Ubiquiti cloud dependency)
+- MFA enabled on Ubiquiti account
+- Device SSH Authentication configured with strong custom credential
+
+### Network — Switch (USW Lite 8 PoE)
+
+- Switch adopted into UniFi controller
+- Switch firmware updated to latest
+- All unused ports administratively disabled
+- DHCP Guarding enabled on all VLANs (trusted DHCP server pinned per network)
+
+### Network — VLAN Segmentation
+
+- **Default / Trusted (192.168.0.0/24):** Main PC
+- **Lab VLAN 20 (192.168.20.0/24):** Proxmox (192.168.20.10 static), Wazuh (192.168.20.20 reserved, pending wired connection)
+- **IoT VLAN 30 (192.168.30.0/24):** PS5 — network isolation enabled, internet access only
+- Proxmox static IP updated in /etc/network/interfaces, web UI confirmed accessible at https://192.168.20.10:8006
+- Devices assigned to correct switch ports (Main PC port 7, Proxmox port 6, PS5 port 5, Wazuh port 4 pending)
 
 ### Proxmox Host
+
 - Root SSH login disabled
 - SSH key-only authentication enforced
 - SSH moved to non-standard port
@@ -37,6 +55,7 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Wazuh agent enrolled and reporting
 
 ### Wazuh Server
+
 - Root SSH login disabled
 - SSH key-only authentication enforced
 - SSH moved to non-standard port
@@ -46,13 +65,20 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Lynis security audit: 62/100
 - rkhunter scan: 0 rootkits, 0 suspect files
 
+
 ## In Progress
 
-- VLAN segmentation (management, lab, personal)
-- UniFi syslog forwarding to Wazuh
+- Wazuh server wired to Lab VLAN via USB-C ethernet adapter (ordered)
+- UniFi syslog forwarding to Wazuh (192.168.20.20) via Activity Logging → SIEM Server
+- Firewall rules — Wazuh agent ports (1514, 1515, 55000) cross-VLAN
+- Management VLAN (separate from default network)
+- Double-NAT resolution — upstream router port-forward for external VPN access
+- WireGuard VPN server configuration
+- Phone and laptop WiFi SSIDs assigned to correct VLANs
 - Wazuh agent on Windows workstation
-- Custom detection rules
+- Custom Wazuh detection rules
 - Let's Encrypt cert for Proxmox (YubiKey WebAuthn 2FA)
+
 
 ## Tools Used
 
