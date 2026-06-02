@@ -16,6 +16,7 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Wazuh SIEM (manager + indexer + dashboard)
 - Kali Linux VM
 - Vulnerable target machines for practice
+- Wazuh agent on Proxmox and Windows PC
 
 
 ## Hardening Completed
@@ -68,11 +69,17 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Ethernet primary with WiFi fallback
 - Static DHCP reservation on lab VLAN
 
+  ### Hardening Completed
+  - Wazuh agent installed and enrolled
+  - Reporting active to Wazuh manager
+  - Firewall rules — Wazuh agent ports (1514, 1515, 55000) cross-VLAN
+  - Wazuh agents installed on Windows PC and Proxmox 
+
 
 ## In Progress
 
 - UniFi syslog forwarding to Wazuh (192.168.20.20) via Activity Logging → SIEM Server
-- Firewall rules — Wazuh agent ports (1514, 1515, 55000) cross-VLAN
+
 - Management VLAN (separate from default network)
 - Double-NAT resolution — upstream router port-forward for external VPN access
 - WireGuard VPN server configuration
