@@ -5,14 +5,14 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 ## Infrastructure
 
 - **Hypervisor:** Proxmox VE on ASRock desktop — Lab VLAN 20 (192.168.20.10)
-- **SIEM:** Wazuh 4.14.5 on Ubuntu Server (laptop) — Lab VLAN 20 pending wired connection (192.168.20.20 reserved)
+- **SIEM:** Wazuh 4.14.5 on Ubuntu Server (laptop) — Lab VLAN 20 (192.168.20.20)
 - **Gateway:** Ubiquiti Dream Router 7 — FP (WPA2/WPA3, segmented VLANs)
 - **Switch:** Ubiquiti USW Lite 8 PoE (managed, adopted)
 
 
 ## What's Running
 
-- Proxmox VE hypervisor
+- Proxmox hypervisor
 - Wazuh SIEM (manager + indexer + dashboard)
 - Kali Linux VM
 - Vulnerable target machines for practice
@@ -37,10 +37,10 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 ### Network — VLAN Segmentation
 
 - **Default / Trusted (192.168.0.0/24):** Main PC
-- **Lab VLAN 20 (192.168.20.0/24):** Proxmox (192.168.20.10 static), Wazuh (192.168.20.20 reserved, pending wired connection)
+- **Lab VLAN 20 (192.168.20.0/24):** Proxmox (192.168.20.10 static), Wazuh (192.168.20.20)
 - **IoT VLAN 30 (192.168.30.0/24):** PS5 — network isolation enabled, internet access only
 - Proxmox static IP updated in /etc/network/interfaces, web UI confirmed accessible at https://192.168.20.10:8006
-- Devices assigned to correct switch ports (Main PC port 7, Proxmox port 6, PS5 port 5, Wazuh port 4 pending)
+- Devices assigned to correct switch ports (Daily PC port 8, Proxmox port 7, PS5 port 6, Wazuh port 5)
 
 ### Proxmox Host
 
@@ -64,11 +64,13 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - File Integrity Monitoring configured on /etc/ssh, /etc/passwd, /etc/shadow
 - Lynis security audit: 62/100
 - rkhunter scan: 0 rootkits, 0 suspect files
+- USB-C to Ethernet adapter configured
+- Ethernet primary with WiFi fallback
+- Static DHCP reservation on lab VLAN
 
 
 ## In Progress
 
-- Wazuh server wired to Lab VLAN via USB-C ethernet adapter (ordered)
 - UniFi syslog forwarding to Wazuh (192.168.20.20) via Activity Logging → SIEM Server
 - Firewall rules — Wazuh agent ports (1514, 1515, 55000) cross-VLAN
 - Management VLAN (separate from default network)
