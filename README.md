@@ -17,6 +17,7 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Kali Linux VM
 - Vulnerable target machines for practice
 - Wazuh agent on Proxmox and Windows PC
+- UniFi syslog ingestion (Dream Router 7 → Wazuh)
 
 
 ## Hardening Completed
@@ -69,22 +70,23 @@ A personal cybersecurity lab built for hands-on offensive and defensive security
 - Ethernet primary with WiFi fallback
 - Static DHCP reservation on lab VLAN
 
-  ### Hardening Completed
-  - Wazuh agent installed and enrolled
-  - Reporting active to Wazuh manager
-  - Firewall rules — Wazuh agent ports (1514, 1515, 55000) cross-VLAN
-  - Wazuh agents installed on Windows PC and Proxmox 
+### Network — Monitoring
+- UniFi syslog forwarding to Wazuh confirmed working (UDP 514)
+- UDR7 WiFi connect/disconnect events visible in Wazuh dashboard
+- Custom UniFi syslog decoder configured (local_decoder.xml)
+- Custom UniFi syslog rules configured (local_rules.xml, rule IDs 100002-100003)
+- Cross-VLAN firewall rule configured (agent ports 1514, 1515, 55000 → 192.168.20.20)
 
+### Windows Workstation
+- Wazuh agent installed and enrolled (ID 002)
+- Reporting active to Wazuh manager (192.168.20.20)
 
 ## In Progress
-
-- UniFi syslog forwarding to Wazuh (192.168.20.20) via Activity Logging → SIEM Server
 
 - Management VLAN (separate from default network)
 - Double-NAT resolution — upstream router port-forward for external VPN access
 - WireGuard VPN server configuration
 - Phone and laptop WiFi SSIDs assigned to correct VLANs
-- Wazuh agent on Windows workstation
 - Custom Wazuh detection rules
 - Let's Encrypt cert for Proxmox (YubiKey WebAuthn 2FA)
 
