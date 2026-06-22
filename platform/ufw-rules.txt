@@ -1,1 +1,125 @@
+# ===================================================================
+# UFW Ruleset — Wazuh Manager (ffwazuh, 192.168.20.20)
+# ===================================================================
+# Host:        ffwazuh.local — Wazuh manager 4.14.5 on Ubuntu 24.04
+# Location:    Lab VLAN 20, dual-homed (ethernet primary, WiFi fallback)
+# Last reviewed: 2026-06-22
+#
+# Defense-in-depth posture:
+#   - UniFi UDR7 gateway is the perimeter firewall
+#   - UFW is the host firewall (this file) — second enforcement point
+#   - Wazuh's own <allowed-ips> in ossec.conf is the application allowlist
+#     (third enforcement point, for the syslog receiver specifically)
+#
+# Source-IP restriction philosophy:
+#   - Admin access (SSH, dashboard, API) only from the Trusted VLAN
+#   - Agent comms only from VLANs that actually host agents
+#   - Syslog only from the specific UDR7 gateway interface, not its primary IP
+# ===================================================================
 
+
+# -------------------------------------------------------------------
+# Active ruleset (output of `sudo ufw status numbered verbose`)
+# -------------------------------------------------------------------
+
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+     To                         Action      From
+     --                         ------      ----
+[ 1] Anywhere on lo             ALLOW IN    Anywhere                   # loopback
+[ 2] 2222/tcp                   ALLOW IN    192.168.0.0/24             # SSH from Trusted
+[ 3] 1514/tcp                   ALLOW IN    192.168.0.0/24             # Wazuh agent comms - Trusted
+[ 4] 1515/tcp                   ALLOW IN    192.168.0.0/24             # Wazuh enrollment - Trusted
+[ 5] 1514/tcp                   ALLOW IN    192.168.20.0/24            # Wazuh agent comms - Lab
+[ 6] 1515/tcp                   ALLOW IN    192.168.20.0/24            # Wazuh enrollment - Lab
+[ 7] 443/tcp                    ALLOW IN    192.168.0.0/24             # Wazuh dashboard
+[ 8] 55000/tcp                  ALLOW IN    192.168.0.0/24             # Wazuh API
+[ 9] 514/udp                    ALLOW IN    192.168.20.1               # UDR7 syslog from Lab gw iface
+[10] Anywhere (v6) on lo        ALLOW IN    Anywhere (v6)              # loopback v6
+
+
+# -------------------------------------------------------------------
+# Reproducer — full build from a fresh `ufw` install
+# -------------------------------------------------------------------
+
+# 0. Safety net (auto-disables UFW in 10 min in case of lockout):
+#    echo "ufw --force disable" | sudo at now + 10 minutes
+#    sudo atq
+
+# 1. Default policies
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow in on lo
+
+# 2. SSH (custom port 2222), restricted to Trusted VLAN
+sudo ufw allow from 192.168.0.0/24 to any port 2222 proto tcp comment 'SSH from Trusted'
+
+# 3. Wazuh agent comms — Trusted (Freddy-PC) + Lab (Proxmox)
+sudo ufw allow from 192.168.0.0/24  to any port 1514 proto tcp comment 'Wazuh agent comms - Trusted'
+sudo ufw allow from 192.168.0.0/24  to any port 1515 proto tcp comment 'Wazuh enrollment - Trusted'
+sudo ufw allow from 192.168.20.0/24 to any port 1514 proto tcp comment 'Wazuh agent comms - Lab'
+sudo ufw allow from 192.168.20.0/24 to any port 1515 proto tcp comment 'Wazuh enrollment - Lab'
+
+# 4. Wazuh dashboard + API — Trusted only
+sudo ufw allow from 192.168.0.0/24 to any port 443   proto tcp comment 'Wazuh dashboard'
+sudo ufw allow from 192.168.0.0/24 to any port 55000 proto tcp comment 'Wazuh API'
+
+# 5. UniFi UDR7 syslog (UDP/514) — see "Lessons learned" below for the source IP
+sudo ufw allow from 192.168.20.1 to any port 514 proto udp comment 'UDR7 syslog from Lab gw iface'
+
+# 6. Enable
+sudo ufw enable
+sudo ufw status numbered verbose
+
+# 7. After verifying SSH + agents + dashboard + syslog all still work,
+#    cancel the safety net:
+#    sudo atq && sudo atrm <jobid>
+
+
+# -------------------------------------------------------------------
+# Deliberately NOT exposed
+# -------------------------------------------------------------------
+
+# 9200/tcp — Wazuh indexer (Elasticsearch fork)
+#   This is an all-in-one install. Dashboard talks to the indexer over
+#   loopback (127.0.0.1), so 9200 has no need to be reachable from
+#   anywhere off-box. Leaving it firewalled off is correct.
+
+# IPv6 inbound
+#   No IPv6 services in use on this LAN. UFW's v6 default-deny on a non-lo
+#   interface is the right posture; only loopback v6 is allowed.
+
+
+# -------------------------------------------------------------------
+# Lessons learned (also documented in docs/findings.md)
+# -------------------------------------------------------------------
+
+# 1. Source-IP rules on a multi-VLAN gateway must use the gateway's
+#    interface IP for the *destination's* VLAN, not its primary address.
+#
+#    Initial UFW rule allowed UDR7 syslog from 192.168.0.1 (gateway's
+#    Trusted-VLAN address). All syslog packets were silently dropped
+#    because the UDR7 actually sources packets to 192.168.20.20 from
+#    its Lab-VLAN interface 192.168.20.1.
+#
+#    Diagnosed via `tcpdump -i any -n udp port 514`: packets visible
+#    on the wire, no corresponding writes in archives.json. Important:
+#    tcpdump on inbound captures *before* netfilter, so seeing a packet
+#    in tcpdump does NOT mean UFW accepted it.
+#
+#    Lesson: when writing source-IP allow rules for a device with
+#    multiple interfaces, the source address is determined by the
+#    device's routing decision toward the destination — not by its
+#    "main" or default IP.
+
+# 2. UFW disables non-destructively. `ufw disable` keeps all rules in
+#    the saved configuration; `ufw enable` brings them back. Useful
+#    for lockout-safety patterns using `at` to auto-disable on a timer.
+
+# 3. The Wazuh manager runs a separate IP allowlist for syslog inside
+#    ossec.conf (<allowed-ips> under the <remote> block). UFW lets a
+#    packet onto the host; Wazuh then decides whether to accept it
+#    into the listener. Both layers must permit the source.
