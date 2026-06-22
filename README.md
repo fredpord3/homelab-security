@@ -11,7 +11,7 @@ Detection engineering lab built on Proxmox + Wazuh + UniFi, segmented by VLAN, m
 | Network | UniFi Dream Router 7 + USW Lite 8 PoE, 3 VLANs (Lab/IoT/Range) |
 | Telemetry | Sysmon (SwiftOnSecurity config) on Windows; auditd + journald on Linux; UniFi syslog for firewall |
 | Detection coverage | 6 MITRE tactics across 10 custom rules |
-| Hardening | SSH key-only on port 2222, fail2ban, TOTP MFA, agent-side encryption |
+| Hardening | SSH key-only on port 2222, fail2ban, TOTP MFA, FIM on credential surfaces |
 
 ## Architecture
 
@@ -44,12 +44,10 @@ See `network/` for VLAN design + topology diagram.
 | Folder | Contents |
 |---|---|
 | `hardware/` | Physical equipment specs, cabling, power |
-| `network/` | VLAN architecture, firewall rules, topology diagram |
-| `platform/` | Proxmox host setup, Wazuh manager + agents, hardening |
-| `detections/` | 10 custom Wazuh rules with MITRE mapping, per-rule writeups, screenshots, live `local_rules.xml` |
-| `decoders/` | Custom UniFi firewall decoder + log samples |
-| `configs/` | Sysmon config, Wazuh agent config, UFW rules |
-| `docs/findings.md` | Lessons learned: real-world constraints that shaped the rules |
+| `network/` | VLAN architecture, switch port map, firewall rules, UniFi config notes, topology |
+| `platform/` | Proxmox host, Wazuh manager, agent enrollment, deployable config files (`wazuh-agent-windows.conf`, `ufw-rules.txt`), hardening detail |
+| `detections/` | 10 custom Wazuh rules with MITRE mapping, per-rule writeups, `local_rules.xml`, `sysmon-swift-base.xml`, `decoders/` subfolder, screenshots |
+| `docs/` | `findings.md` (lessons learned / war stories), `roadmap.md` (what's next) |
 
 ## Status
 
@@ -61,8 +59,8 @@ See `network/` for VLAN design + topology diagram.
 | Sysmon telemetry pipeline | ✅ Validated end-to-end (897+ events from Freddy-PC) |
 | Stock Wazuh detections | ✅ Validated (5710, 5712, 5503, 5551, 92057, 92900 confirmed firing) |
 | Custom rules deployed | ✅ 10 rules in `local_rules.xml` |
-| Custom rules validated firing | 🟡 In progress (validation methodology documented per rule) |
-| UniFi firewall decoder | 🟡 Partial (UDR7 CEF log format requires further field extraction) |
+| Custom rules validated firing | 🟡 In progress (methodology + status documented per rule) |
+| UniFi firewall decoder | 🟡 Partial (UDR7 CEF format requires further field extraction) |
 | Range VLAN detonation VM | ⏳ Planned (required to validate ASR-blocked techniques) |
 
 ## Skills demonstrated
@@ -70,7 +68,7 @@ See `network/` for VLAN design + topology diagram.
 - **Detection engineering**: Authored Sigma-style detections in Wazuh's rule schema, tiered custom rules on stock parent rules (`if_sid`, `if_matched_sid`, `if_matched_group`) to reduce alert fatigue
 - **MITRE ATT&CK mapping**: 6 tactics covered (Discovery, Execution, Defense Evasion, Credential Access, Persistence, Ingress Tool Transfer)
 - **Network architecture**: VLAN segmentation, syslog routing, agent enrollment with cert-pinned channels, dual-homed SIEM with route metrics
-- **Linux hardening**: SSH key-only auth on non-standard port, fail2ban, TOTP MFA, FIM on critical paths, kernel-level mitigations
+- **Linux hardening**: SSH key-only auth on non-standard port, fail2ban, TOTP MFA, FIM on credential surfaces, kernel-level mitigations
 - **SIEM troubleshooting**: Diagnosed ruleset load failures via `wazuh-logtest`, identified silent warnings not surfaced in `ossec.log`, traced custom rule non-firing to invalid options blocking entire file parse
 
 ## Findings highlighted in `docs/findings.md`
@@ -78,5 +76,9 @@ See `network/` for VLAN design + topology diagram.
 - Microsoft Defender ASR preempts execution of LOLBins and PowerShell download cradles on hardened endpoints, making certain rules untestable without a dedicated detonation VM
 - Wazuh's `(7612)` duplicate rule warning surfaces only via `wazuh-logtest`, not in `ossec.log`'s error/critical streams — a non-obvious diagnostic path
 - A single invalid rule option (e.g. `different_destination_port`) causes the *entire* `local_rules.xml` to fail to load rather than skipping the bad rule — silently disabling every custom detection
-- UniFi UDR7 syslog uses CEF format with `program_name="CEF"` and `hostname="Dream-Router-7-FP"`; stock decoders do not match and custom decoder is required
+- UniFi UDR7 syslog uses CEF format with `program_name="CEF"` and `hostname="Dream-Router-7-FP"`; stock decoders do not match, custom decoder required
 - Lynis baseline audits: Proxmox 65/100, Wazuh 62/100; rkhunter clean on both; FIM configured on `/etc/ssh`, `/etc/passwd`, `/etc/shadow` to catch tampering with credential and access-control surfaces
+
+## Author
+
+Frederick Pordum III — Mercyhurst University (B.S. Cybersecurity, B.A. Business Management, May 2025) — targeting SOC analyst and detection engineering roles.
