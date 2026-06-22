@@ -1,96 +1,82 @@
-# Cybersecurity Homelab
+# homelab-security
 
-A personal cybersecurity lab built for hands-on offensive and defensive security practice.
+Detection engineering lab built on Proxmox + Wazuh + UniFi, segmented by VLAN, mapped to MITRE ATT&CK. Authored 10 custom Wazuh rules tiered on stock detections, validated against simulated attacker behavior, and documented real-world constraints encountered along the way.
 
-## Infrastructure
+## TL;DR
 
-- **Hypervisor:** Proxmox VE on ASRock desktop — Lab VLAN 20 (192.168.20.10)
-- **SIEM:** Wazuh 4.14.5 on Ubuntu Server (laptop) — Lab VLAN 20 (192.168.20.20)
-- **Gateway:** Ubiquiti Dream Router 7 — FP (WPA2/WPA3, segmented VLANs)
-- **Switch:** Ubiquiti USW Lite 8 PoE (managed, adopted)
+| Component | Detail |
+|---|---|
+| Hypervisor | Proxmox VE on i7-8700 / 32GB DDR4 |
+| SIEM | Wazuh 4.14.5 (manager + indexer + dashboard) on Ubuntu Server, dual-homed (ethernet primary 192.168.20.20, WiFi fallback via netplan route metrics 100/600) |
+| Network | UniFi Dream Router 7 + USW Lite 8 PoE, 3 VLANs (Lab/IoT/Range) |
+| Telemetry | Sysmon (SwiftOnSecurity config) on Windows; auditd + journald on Linux; UniFi syslog for firewall |
+| Detection coverage | 6 MITRE tactics across 10 custom rules |
+| Hardening | SSH key-only on port 2222, fail2ban, TOTP MFA, agent-side encryption |
 
+## Architecture
 
-## What's Running
+```
+                       Internet
+                          │
+                  ┌───────┴───────┐
+                  │  UniFi UDR7   │  syslog ─────┐
+                  └───────┬───────┘              │
+                          │                      │
+                  ┌───────┴───────┐              │
+                  │ USW Lite 8 PoE│              │
+                  └───────┬───────┘              │
+        ┌─────────────────┼─────────────────┐    │
+   VLAN 20            VLAN 30           VLAN 40  │
+   (Lab)              (IoT)             (Range)  │
+        │                 │                 │    │
+        ├── Proxmox host  ├── IoT devices   ├── (planned)   │
+        │   └── Wazuh VM ─┼─────────────────┼────► port 514─┘
+        │                 │                 │
+        └── Freddy-PC (Win11) ──► port 1514 ──► Wazuh agent
+```
 
-- Proxmox hypervisor
-- Wazuh SIEM (manager + indexer + dashboard)
-- Kali Linux VM
-- Vulnerable target machines for practice
-- Wazuh agent on Proxmox and Windows PC
-- UniFi syslog ingestion (Dream Router 7 → Wazuh)
+VLAN segmentation isolates the detonation range (40) from the analyst workstation (20) and IoT trust boundary (30). Syslog from the UDR7 lands on the Wazuh manager via UDP/514; endpoint agents enroll via TCP/1514 with shared-key authentication.
 
+See `network/` for VLAN design + topology diagram.
 
-## Hardening Completed
+## Repo navigation
 
-### Network — Gateway (Dream Router 7)
+| Folder | Contents |
+|---|---|
+| `hardware/` | Physical equipment specs, cabling, power |
+| `network/` | VLAN architecture, firewall rules, topology diagram |
+| `platform/` | Proxmox host setup, Wazuh manager + agents, hardening |
+| `detections/` | 10 custom Wazuh rules with MITRE mapping, per-rule writeups, screenshots, live `local_rules.xml` |
+| `decoders/` | Custom UniFi firewall decoder + log samples |
+| `configs/` | Sysmon config, Wazuh agent config, UFW rules |
+| `docs/findings.md` | Lessons learned: real-world constraints that shaped the rules |
 
-- UniFi OS and Network application updated to latest
-- Local backup admin created (Super Admin role, local access only — no Ubiquiti cloud dependency)
-- MFA enabled on Ubiquiti account
-- Device SSH Authentication configured with strong custom credential
+## Status
 
-### Network — Switch (USW Lite 8 PoE)
+| Layer | State |
+|---|---|
+| Network segmentation | ✅ Production |
+| Wazuh manager + indexer + dashboard | ✅ Production |
+| Endpoint agents (Win11, Ubuntu, Proxmox) | ✅ Enrolled, active |
+| Sysmon telemetry pipeline | ✅ Validated end-to-end (897+ events from Freddy-PC) |
+| Stock Wazuh detections | ✅ Validated (5710, 5712, 5503, 5551, 92057, 92900 confirmed firing) |
+| Custom rules deployed | ✅ 10 rules in `local_rules.xml` |
+| Custom rules validated firing | 🟡 In progress (validation methodology documented per rule) |
+| UniFi firewall decoder | 🟡 Partial (UDR7 CEF log format requires further field extraction) |
+| Range VLAN detonation VM | ⏳ Planned (required to validate ASR-blocked techniques) |
 
-- Switch adopted into UniFi controller
-- Switch firmware updated to latest
-- All unused ports administratively disabled
-- DHCP Guarding enabled on all VLANs (trusted DHCP server pinned per network)
+## Skills demonstrated
 
-### Network — VLAN Segmentation
+- **Detection engineering**: Authored Sigma-style detections in Wazuh's rule schema, tiered custom rules on stock parent rules (`if_sid`, `if_matched_sid`, `if_matched_group`) to reduce alert fatigue
+- **MITRE ATT&CK mapping**: 6 tactics covered (Discovery, Execution, Defense Evasion, Credential Access, Persistence, Ingress Tool Transfer)
+- **Network architecture**: VLAN segmentation, syslog routing, agent enrollment with cert-pinned channels, dual-homed SIEM with route metrics
+- **Linux hardening**: SSH key-only auth on non-standard port, fail2ban, TOTP MFA, FIM on critical paths, kernel-level mitigations
+- **SIEM troubleshooting**: Diagnosed ruleset load failures via `wazuh-logtest`, identified silent warnings not surfaced in `ossec.log`, traced custom rule non-firing to invalid options blocking entire file parse
 
-- **Default / Trusted (192.168.0.0/24):** Main PC
-- **Lab VLAN 20 (192.168.20.0/24):** Proxmox (192.168.20.10 static), Wazuh (192.168.20.20)
-- **IoT VLAN 30 (192.168.30.0/24):** PS5 — network isolation enabled, internet access only
-- Proxmox static IP updated in /etc/network/interfaces, web UI confirmed accessible at https://192.168.20.10:8006
-- Devices assigned to correct switch ports (Daily PC port 8, Proxmox port 7, PS5 port 6, Wazuh port 5)
+## Findings highlighted in `docs/findings.md`
 
-### Proxmox Host
-
-- Root SSH login disabled
-- SSH key-only authentication enforced
-- SSH moved to non-standard port
-- Non-root admin user created (principle of least privilege)
-- TOTP 2FA enabled on web UI
-- fail2ban installed for brute force protection
-- Lynis security audit: 65/100
-- rkhunter scan: 0 rootkits detected
-- Wazuh agent enrolled and reporting
-
-### Wazuh Server
-
-- Root SSH login disabled
-- SSH key-only authentication enforced
-- SSH moved to non-standard port
-- Non-root admin user
-- fail2ban installed
-- File Integrity Monitoring configured on /etc/ssh, /etc/passwd, /etc/shadow
-- Lynis security audit: 62/100
-- rkhunter scan: 0 rootkits, 0 suspect files
-- USB-C to Ethernet adapter configured
-- Ethernet primary with WiFi fallback
-- Static DHCP reservation on lab VLAN
-
-### Network — Monitoring
-- UniFi syslog forwarding to Wazuh confirmed working (UDP 514)
-- UDR7 WiFi connect/disconnect events visible in Wazuh dashboard
-- Custom UniFi syslog decoder configured (local_decoder.xml)
-- Custom UniFi syslog rules configured (local_rules.xml, rule IDs 100002-100003)
-- Cross-VLAN firewall rule configured (agent ports 1514, 1515, 55000 → 192.168.20.20)
-
-### Windows Workstation
-- Wazuh agent installed and enrolled (ID 002)
-- Reporting active to Wazuh manager (192.168.20.20)
-
-## In Progress
-
-- Management VLAN (separate from default network)
-- Double-NAT resolution — upstream router port-forward for external VPN access
-- WireGuard VPN server configuration
-- Phone and laptop WiFi SSIDs assigned to correct VLANs
-- Custom Wazuh detection rules
-- Let's Encrypt cert for Proxmox (YubiKey WebAuthn 2FA)
-
-
-## Tools Used
-
-Proxmox VE, Wazuh, Kali Linux, Lynis, rkhunter, fail2ban, Ubiquiti UniFi
+- Microsoft Defender ASR preempts execution of LOLBins and PowerShell download cradles on hardened endpoints, making certain rules untestable without a dedicated detonation VM
+- Wazuh's `(7612)` duplicate rule warning surfaces only via `wazuh-logtest`, not in `ossec.log`'s error/critical streams — a non-obvious diagnostic path
+- A single invalid rule option (e.g. `different_destination_port`) causes the *entire* `local_rules.xml` to fail to load rather than skipping the bad rule — silently disabling every custom detection
+- UniFi UDR7 syslog uses CEF format with `program_name="CEF"` and `hostname="Dream-Router-7-FP"`; stock decoders do not match and custom decoder is required
+- Lynis baseline audits: Proxmox 65/100, Wazuh 62/100; rkhunter clean on both; FIM configured on `/etc/ssh`, `/etc/passwd`, `/etc/shadow` to catch tampering with credential and access-control surfaces
