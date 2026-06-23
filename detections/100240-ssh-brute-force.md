@@ -55,11 +55,11 @@ Expected sequence:
 
 ## Observed status
 
-✅ Confirmed firing during fail2ban tuning. Three things happened concurrently as expected:
+Rule deployed and parse-validated. Expected behaviour when exercised:
 
-- `alerts.json` recorded both 5712 (level 10) and 100240 (level 12)
-- `fail2ban-client status sshd` showed the test source IP in the banned list
-- `journalctl -u sshd` showed the matching failed-password lines
+- `alerts.json` should record both 5712 (level 10) and 100240 (level 12)
+- `fail2ban-client status sshd` should show the source IP in the banned list
+- `journalctl -u sshd` should show the matching failed-password lines
 
 ## Tuning notes
 
