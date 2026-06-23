@@ -10,11 +10,7 @@ Lessons learned, gotchas, and non-obvious troubleshooting paths from building th
 
 **Cause:** Microsoft Defender's Attack Surface Reduction (ASR) rules block the *action* before the technique completes, on a fully-patched Windows 11 Pro endpoint with default Defender posture:
 
-| ASR rule GUID | Blocks |
-|---|---|
-| `9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2` | Credential stealing from LSASS |
-| `d3e037e1-3eb8-44c8-a917-57927947596d` | JavaScript/VBScript launching downloaded executable content |
-| `d1e49aac-8f56-4280-b9ba-993a6d77406c` | Process creations from PSExec/WMI commands |
+Three of Microsoft Defender's ASR rules are particularly relevant here: the rule blocking credential theft from LSASS, the rule blocking JavaScript/VBScript from launching downloaded executable content, and the rule blocking process creations originating from PSExec and WMI commands.
 
 Plus Tamper Protection blocks `Set-MpPreference -Disable*` and `sc stop windefend`.
 
@@ -150,12 +146,12 @@ Document on first contact rather than the second. Worth noting in the platform d
 
 ## 9. UFW disables non-destructively — use `at` for lockout safety
 
-I've now hit "I just SSH'd in, ran `ufw enable`, and now I can't get back in" exactly once. The recovery was a trip to the rack to log in at the console. Two lessons:
+Standard lockout-safety pattern for SSH-based UFW changes:
 
-1. `ufw enable` only applies the *currently-saved* ruleset. If you forgot the SSH allow rule, the connection drops the moment you press enter.
+1. `ufw enable` only applies the *currently-saved* ruleset. If the SSH allow rule is missing, the connection drops the moment enable applies.
 2. `ufw disable` keeps all rules in the saved config — it just stops enforcing them. `ufw enable` later brings them back exactly as they were.
 
-The pattern I now use for any UFW change made over SSH:
+The pattern for any UFW change made over SSH:
 
 ```bash
 # Set a 10-minute auto-disable in case I lock myself out
