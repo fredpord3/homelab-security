@@ -59,7 +59,7 @@ What does happen:
 
 So the *detection* validates end-to-end; what cannot be validated on Freddy-PC is the post-detection payload behaviour (which would be the input to additional rules like 100210 if the payload itself uses encoded commands).
 
-Confirmed firing 2025-12. Screenshot in `screenshots/100290-firing.png`.
+Confirmed firing. Screenshot in `screenshots/100290-firing.png`.
 
 ## Tuning notes
 
