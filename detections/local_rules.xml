@@ -1,1 +1,181 @@
+This XML file does not appear to have any style information associated with it. The document tree is shown below.
+<!-- 
+  homelab-security custom rules
+  ============================================================================
+  ID range: 100200–100299 (per Wazuh custom-rule convention, > 100000)
+  Tiered on stock parent rules via if_sid / if_matched_sid / if_matched_group.
 
+  MITRE ATT&CK tactics covered:
+    TA0007 Discovery            — 100200
+    TA0002 Execution            — 100210, 100290
+    TA0005 Defense Evasion      — 100210, 100220, 100250, 100280
+    TA0006 Credential Access    — 100230, 100240
+    TA0003 Persistence          — 100260, 100270
+    TA0011 Command & Control    — 100290
+    TA0009 Collection / TA0008 Lateral Movement adjacencies noted in writeups
+
+  See ./README.md for per-rule writeups, validation status, test methodology.
+ -->
+<group name="homelab,custom,">
+<!--  =====================================================================
+       100200 — Port scan from internal host (Discovery / T1046)
+       Parent: 92057 (UDR7 firewall block via custom unifi-fw decoder)
+       =====================================================================  -->
+<rule id="100200" level="10" frequency="20" timeframe="60">
+<if_matched_sid>92057</if_matched_sid>
+<same_source_ip/>
+<different_dstport/>
+<description>Possible internal port scan: $(srcip) hit 20+ distinct destination ports within 60s (UDR7 firewall blocks).</description>
+<mitre>
+<id>T1046</id>
+</mitre>
+<group>recon,discovery,attack.discovery,</group>
+</rule>
+<!--  =====================================================================
+       100210 — Encoded PowerShell command (Execution + Defense Evasion)
+       Parent: 92052 (Sysmon EventID 1 — process create)
+       Detects -EncodedCommand / -enc / -e / -ec invocations
+       =====================================================================  -->
+<rule id="100210" level="12">
+<if_sid>92052</if_sid>
+<field name="win.eventdata.image" type="pcre2">(?i)\\powershell(_ise)?\.exe$</field>
+<field name="win.eventdata.commandLine" type="pcre2">(?i)\s-e(c|nc|ncodedcommand)?\s+[A-Za-z0-9+/=]{40,}</field>
+<description>PowerShell launched with -EncodedCommand (base64 payload, $(win.eventdata.user)).</description>
+<mitre>
+<id>T1059.001</id>
+<id>T1027</id>
+</mitre>
+<group>powershell,obfuscation,attack.execution,attack.defense_evasion,</group>
+</rule>
+<!--  =====================================================================
+       100220 — Defender service tampering (Defense Evasion / T1562.001)
+       Parent: 60103 (Windows Service Control Manager events) / 92053 (Sysmon
+       EventID 13 registry value set, fallback)
+       Detects Set-MpPreference disable-style toggles + service stop attempts
+       =====================================================================  -->
+<rule id="100220" level="13">
+<if_sid>92052</if_sid>
+<field name="win.eventdata.commandLine" type="pcre2">(?i)(set-mppreference.*-disable|sc(\.exe)?\s+(stop|config)\s+windefend|stop-service.*windefend)</field>
+<description>Microsoft Defender tampering attempt: $(win.eventdata.commandLine)</description>
+<mitre>
+<id>T1562.001</id>
+</mitre>
+<group>defender,defense_evasion,attack.defense_evasion,</group>
+</rule>
+<!--  =====================================================================
+       100230 — LSASS process access (Credential Access / T1003.001)
+       Parent: 92065 (Sysmon EventID 10 — process access)
+       Granted access masks indicative of memory read:
+         0x1010 = PROCESS_VM_READ | PROCESS_QUERY_LIMITED_INFORMATION
+         0x1410 = + PROCESS_QUERY_INFORMATION
+         0x1438 = procdump default
+       =====================================================================  -->
+<rule id="100230" level="14">
+<if_sid>92065</if_sid>
+<field name="win.eventdata.targetImage" type="pcre2">(?i)\\lsass\.exe$</field>
+<field name="win.eventdata.grantedAccess" type="pcre2">^0x(1010|1410|1438|143A|1FFFFF)$</field>
+<description>LSASS memory access from $(win.eventdata.sourceImage) with grantedAccess=$(win.eventdata.grantedAccess) — possible credential dump.</description>
+<mitre>
+<id>T1003.001</id>
+</mitre>
+<group>credential_access,lsass,attack.credential_access,</group>
+</rule>
+<!--  =====================================================================
+       100240 — SSH brute force, internal source (Credential Access / T1110.001)
+       Parent: 5712 (sshd: brute force trying to login)
+       Tightens the stock rule by raising level when source is RFC1918
+       =====================================================================  -->
+<rule id="100240" level="12">
+<if_sid>5712</if_sid>
+<srcip>192.168.0.0/16</srcip>
+<description>SSH brute force from internal source $(srcip) — lateral movement candidate.</description>
+<mitre>
+<id>T1110.001</id>
+<id>T1021.004</id>
+</mitre>
+<group>authentication_failures,attack.credential_access,attack.lateral_movement,</group>
+</rule>
+<!--  =====================================================================
+       100250 — LOLBin abuse (Defense Evasion / T1218)
+       Parent: 92052 (Sysmon EventID 1)
+       Covers: mshta, regsvr32 (scrobj), rundll32 (javascript:), wmic xsl,
+               certutil -urlcache / -decode, bitsadmin /transfer
+       NOTE: Defender ASR rules preempt several of these on hardened endpoints
+             — see ../docs/findings.md for the test-environment workaround.
+       =====================================================================  -->
+<rule id="100250" level="12">
+<if_sid>92052</if_sid>
+<field name="win.eventdata.commandLine" type="pcre2">(?i)(mshta.*\b(http|javascript:)|regsvr32.*\/i:http|regsvr32.*scrobj\.dll|rundll32.*javascript:|wmic.*\/format:.*http|certutil.*-(urlcache|decode)|bitsadmin.*\/transfer)</field>
+<description>LOLBin abuse pattern: $(win.eventdata.image) — $(win.eventdata.commandLine)</description>
+<mitre>
+<id>T1218</id>
+<id>T1105</id>
+</mitre>
+<group>lolbin,living_off_the_land,attack.defense_evasion,attack.execution,</group>
+</rule>
+<!--  =====================================================================
+       100260 — Suspicious scheduled task (Persistence / T1053.005)
+       Parent: 92052 (Sysmon EventID 1)
+       Detects schtasks.exe /create with high-risk action context:
+         - SYSTEM/HIGHEST run level
+         - ONLOGON or ONSTART triggers
+         - PowerShell / cmd as the action target
+       =====================================================================  -->
+<rule id="100260" level="11">
+<if_sid>92052</if_sid>
+<field name="win.eventdata.image" type="pcre2">(?i)\\schtasks\.exe$</field>
+<field name="win.eventdata.commandLine" type="pcre2">(?i)\/create.*(\/sc\s+(onlogon|onstart)|\/ru\s+(system|highest)|\/tr.*(powershell|cmd|wscript|cscript|rundll32))</field>
+<description>Suspicious scheduled task created: $(win.eventdata.commandLine)</description>
+<mitre>
+<id>T1053.005</id>
+</mitre>
+<group>persistence,scheduled_task,attack.persistence,</group>
+</rule>
+<!--  =====================================================================
+       100270 — New Windows service installed (Persistence / T1543.003)
+       Parent: 92052 (Sysmon EventID 1) for sc.exe create
+       Also chains off Security 7045 if that channel is forwarded
+       =====================================================================  -->
+<rule id="100270" level="10">
+<if_sid>92052</if_sid>
+<field name="win.eventdata.image" type="pcre2">(?i)\\sc\.exe$</field>
+<field name="win.eventdata.commandLine" type="pcre2">(?i)sc(\.exe)?\s+(\\\\[^\s]+\s+)?create\s</field>
+<description>New Windows service created via sc.exe: $(win.eventdata.commandLine)</description>
+<mitre>
+<id>T1543.003</id>
+</mitre>
+<group>persistence,new_service,attack.persistence,</group>
+</rule>
+<!--  =====================================================================
+       100280 — Critical service stopped (Defense Evasion / Impact)
+       Parent: 92900 (Windows Service Control Manager — service stopped)
+       Watchlist: WinDefend, Wazuh, Sysmon64, EventLog, MpsSvc (firewall)
+       =====================================================================  -->
+<rule id="100280" level="12">
+<if_sid>92900</if_sid>
+<field name="win.eventdata.serviceName" type="pcre2">(?i)^(WinDefend|Sense|WdNisSvc|MpsSvc|EventLog|Sysmon64|WazuhSvc)$</field>
+<description>Security-relevant service stopped: $(win.eventdata.serviceName) on $(agent.name)</description>
+<mitre>
+<id>T1562.001</id>
+<id>T1489</id>
+</mitre>
+<group>defense_evasion,service_stop,attack.defense_evasion,attack.impact,</group>
+</rule>
+<!--  =====================================================================
+       100290 — PowerShell download cradle (Ingress Tool Transfer / T1105)
+       Parent: 92052 (Sysmon EventID 1)
+       Detects the canonical IEX (New-Object Net.WebClient).DownloadString
+       pattern and its modern variants (Invoke-WebRequest piped to IEX, etc.)
+       =====================================================================  -->
+<rule id="100290" level="13">
+<if_sid>92052</if_sid>
+<field name="win.eventdata.image" type="pcre2">(?i)\\powershell(_ise)?\.exe$</field>
+<field name="win.eventdata.commandLine" type="pcre2">(?i)(iex|invoke-expression).{0,80}(new-object.{0,40}(net\.webclient|system\.net\.webclient)|invoke-webrequest|iwr|wget|curl|downloadstring|downloaddata|downloadfile)</field>
+<description>PowerShell download cradle: $(win.eventdata.commandLine)</description>
+<mitre>
+<id>T1105</id>
+<id>T1059.001</id>
+</mitre>
+<group>ingress_tool_transfer,powershell,attack.command_and_control,attack.execution,</group>
+</rule>
+</group>
