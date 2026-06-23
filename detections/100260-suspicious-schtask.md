@@ -44,7 +44,7 @@ schtasks /delete /tn "Updater_100260_test" /f
 
 ## Observed status
 
-✅ Confirmed firing. The above schtasks invocation produced a Sysmon EventID 1 with the full command line preserved, stock 92052 matched, and custom 100260 fired at level 11. Alert visible in dashboard, recorded in `alerts.json`.
+Rule deployed and parse-validated. End-to-end validation in progress.
 
 Notably the rule also detects schtasks invocations from PowerShell (`Register-ScheduledTask`) at the schtasks.exe process layer when PowerShell shells out — but it does NOT detect the pure-WMI / pure-cmdlet path (`New-ScheduledTaskAction` → `Register-ScheduledTask` without ever spawning schtasks.exe). That gap is addressed in [`../docs/roadmap.md`](../docs/roadmap.md) under "WMI / cmdlet-only task creation detection".
 
