@@ -27,11 +27,13 @@ See [`../network/README.md`](../network/README.md) for VLAN architecture.
 
 ## VMs
 
-| VMID | Name | RAM | Bootdisk | Status | Purpose |
-|---|---|---|---|---|---|
-| 100 | windows11 | 16 GB | 55 GB | stopped | Range VLAN 40 detonation host (planned: Defender disabled, Sysmon enrolled to Wazuh) |
+| VMID | Name | VLAN | RAM | Bootdisk | Status | Purpose |
+|---|---|---|---|---|---|---|
+| 100 | `windows11` | 40 (Range) | 16 GB | 55 GB | Range detonation host (planned: Defender disabled, Sysmon enrolled to Wazuh) |
+| 101 | `kali` | 40 (Range) | 8 GB | 30 GB | Range attacker host (offensive tooling). Wazuh agent enrolled — the attacker VM is itself instrumented, so its activity fires detections. Internet egress allowed for tool updates. |
+| 300 | `metasploitable` | 40 (Range) | 2 GB | 8 GB | Deliberately-vulnerable Linux victim (Metasploitable 2). **No internet egress** — blocked at the UDR7. No Wazuh agent (Metasploitable 2 ships ancient Ubuntu 8.04 that won't run a modern agent); detection plane for this box is network telemetry from the UDR7 firewall plus inbound-attack telemetry from Kali's own agent. |
 
-VM expansion in progress — Kali attacker + Linux victim VMs planned for the detonation environment. See [`../docs/roadmap.md`](../docs/roadmap.md).
+VM expansion is **active** — the Range VLAN now has a working attacker (Kali) + victim (Metasploitable) pair. Windows 11 detonation VM remains stopped pending the workflow to disable Defender / Tamper Protection inside the eval image. See [`../docs/roadmap.md`](../docs/roadmap.md) for what comes next.
 
 ## Hardening
 
@@ -86,11 +88,24 @@ Covers credential surfaces (`/etc/passwd`, `/etc/shadow`, `/etc/ssh`), all binar
 - No public internet exposure (firewall blocks WAN access)
 - Self-signed TLS cert (Let's Encrypt + DNS-01 challenge planned — see [`../docs/roadmap.md`](../docs/roadmap.md))
 
+### Range VLAN VM isolation
+
+Because Metasploitable is intentionally vulnerable, it is treated as untrusted from the Proxmox host's perspective:
+
+- Range VMs (`kali`, `metasploitable`, `windows11`) bridge to the **VLAN 40 tag** on Proxmox's network bridge — they do NOT share the management network with `pve` itself
+- Console access (`qm terminal`, noVNC) only from the host's web UI on the Lab VLAN
+- Snapshots taken before each detonation session so a compromised Metasploitable can be rolled back
+
 ## Wazuh agent
 
-Enrolled as agent ID `001`, name `pve`. Reports to `192.168.20.20` (manager) on TCP/1514. See [`./wazuh-agents.md`](./wazuh-agents.md) for enrollment process and what's monitored.
+Enrolled as agent ID `001`, name `pve`. Reports to `192.168.20.20` (manager) on TCP/1514.
+
+See [`./wazuh-agents.md`](./wazuh-agents.md) for enrollment process and what's monitored.
+
+The Kali VM also runs a Wazuh agent. The Windows 11 detonation VM will when it's brought up. Metasploitable does not (see VMs table above).
 
 ## Notes
 
 - Proxmox's minimal Debian base does not install `sudo` by default. Either install it (`apt install sudo`) or work as root — this lab installs sudo and creates a non-root admin user with sudo privileges.
 - The Wazuh manager itself is **not** a Proxmox VM — it runs on a dedicated HP Envy laptop. This is intentional: keeping the SIEM out of the hypervisor's blast radius means a Proxmox compromise doesn't take out the monitoring plane.
+- Snapshot the Range VMs before each test run. `qm snapshot 102 pre-test` is muscle memory at this point.
