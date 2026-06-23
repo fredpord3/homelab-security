@@ -46,7 +46,7 @@ This is the desired outcome: the rule detects the *attempt*, regardless of wheth
 
 ## Observed status
 
-🟡 Partial validation. The PowerShell-cmdlet path (`Set-MpPreference`) fires the rule even when Tamper Protection blocks the action. The `sc.exe stop windefend` path could not be exercised end-to-end on Freddy-PC because `sc.exe` returns `Access denied` before producing the relevant log line in a useful form. Full validation of all three branches is pending the Range VLAN VM with Defender disabled.
+🟡 Rule deployed and parse-validated. Full validation of all three branches pending the Range VLAN VM with Defender disabled.
 
 ## Tuning notes
 
