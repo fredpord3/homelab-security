@@ -4,17 +4,17 @@
 |---|---|
 | Rule ID | 100260 |
 | Level | 11 |
-| MITRE technique | [T1053.005 — Scheduled Task/Job: Scheduled Task](https://attack.mitre.org/techniques/T1053/005/) |
+| MITRE technique | [T1053.005 — Scheduled Task/Job](https://attack.mitre.org/techniques/T1053/005/) |
 | Tactic | TA0003 Persistence |
-| Parent rule | 92052 (Sysmon EventID 1 — process create) |
+| Parent group | `sysmon_event1` (Sysmon EventID 1, process create) |
 | Telemetry | Sysmon `Microsoft-Windows-Sysmon/Operational` |
-| Status | ✅ Validated firing |
+| Status | 🟡 Deployed, validation in progress |
 
 ## Detection logic
 
 ```xml
 <rule id="100260" level="11">
-  <if_sid>92052</if_sid>
+  <if_group>sysmon_event1</if_group>
   <field name="win.eventdata.image" type="pcre2">(?i)\\schtasks\.exe$</field>
   <field name="win.eventdata.commandLine" type="pcre2">(?i)\/create.*(\/sc\s+(onlogon|onstart)|\/ru\s+(system|highest)|\/tr.*(powershell|cmd|wscript|cscript|rundll32))</field>
   <description>Suspicious scheduled task created.</description>
@@ -22,20 +22,24 @@
 </rule>
 ```
 
-Two field constraints, the first identifying the binary, the second a disjunction over three suspicious-action signals:
+Two field constraints — the first identifying the binary, the second a disjunction over three suspicious-action signals:
 
-| Signal | Why it's suspicious |
+| Signal | Why suspicious |
 |---|---|
-| `/sc onlogon` or `/sc onstart` | Boot/login persistence triggers; rare for benign admin tasks (which usually use `/sc daily` or `/sc weekly`) |
-| `/ru system` or `/ru highest` | Running as SYSTEM or with elevated privileges — admin tools mostly use the default `INTERACTIVE` user |
-| `/tr <interpreter>` | Action target is a script interpreter (PowerShell, cmd, WScript, CScript, rundll32) rather than a normal executable |
+| `/sc onlogon` or `/sc onstart` | Boot/login persistence triggers |
+| `/ru system` or `/ru highest` | Running as SYSTEM or with elevated privileges |
+| `/tr <interpreter>` | Action target is a script interpreter rather than a normal executable |
 
-The three are OR'd because a real attacker task usually hits at least two (e.g. SYSTEM + onlogon + powershell), but the rule fires on any single signal to catch lighter-weight persistence attempts.
+OR'd together because a real attacker task usually hits two or more, but the rule fires on any one to catch lighter-weight persistence attempts.
+
+## Stock-coverage check
+
+Reviewed `0800-sysmon_id_1.xml`. Stock has rules for various Sysmon EventID 1 patterns but no schtasks.exe-specific detection. Custom rule fills a genuine gap.
 
 ## Test methodology
 
 ```cmd
-:: Should fire (/sc onlogon trigger)
+:: Should fire (/sc onlogon trigger + powershell as action)
 schtasks /create /tn "Updater_100260_test" /tr "powershell.exe -nop -c 'Write-Host 100260'" /sc onlogon /f
 
 :: Cleanup
@@ -46,15 +50,18 @@ schtasks /delete /tn "Updater_100260_test" /f
 
 Rule deployed and parse-validated. End-to-end validation in progress.
 
-Notably the rule also detects schtasks invocations from PowerShell (`Register-ScheduledTask`) at the schtasks.exe process layer when PowerShell shells out — but it does NOT detect the pure-WMI / pure-cmdlet path (`New-ScheduledTaskAction` → `Register-ScheduledTask` without ever spawning schtasks.exe). That gap is addressed in [`../docs/roadmap.md`](../docs/roadmap.md) under "WMI / cmdlet-only task creation detection".
+## Known coverage gaps in this rule
+
+- **PowerShell `Register-ScheduledTask` path is NOT covered** — that cmdlet uses WMI under the hood and may not spawn schtasks.exe, so the rule misses it. Adding coverage for `Microsoft-Windows-TaskScheduler/Operational` EventID 106 would close this gap. Tracked in [`../docs/roadmap.md`](../docs/roadmap.md).
+- **Pure-WMI task creation is also missed** — same root cause as above
+- **Scheduled task deletion (T1070.006 — covering tracks) is not covered** — a future companion rule against `/delete` patterns would catch audit-trail tampering
 
 ## Tuning notes
 
-- **Level 11, not higher** — scheduled-task creation is a legitimate admin operation. Level 11 routes it to the medium-severity bucket where a SOC analyst can triage; a false-positive at level 13 would be more disruptive than the rule is worth
-- **`/ru system` false positives** — Microsoft's own installers (Office, Edge updaters) sometimes create SYSTEM-run tasks. The first week of post-deployment baseline should be reviewed and persistent benign sources allowlisted via a higher-ID rule with `if_sid 100260` + `<options>no_log</options>` style suppression — better than weakening the detection regex
-- **Doesn't yet detect deletion of audit-trail scheduled tasks** (T1070.006). A future rule chained off `/delete` patterns against known-protected task names would close that gap
+- **Level 11, not higher** — scheduled-task creation is a legitimate admin operation. Level 11 routes it to the medium-severity bucket for triage; a false positive at level 13 would be more disruptive than the rule is worth
+- **`/ru system` false positives expected from Microsoft installers** — Office and Edge updaters occasionally create SYSTEM-run tasks. Baseline review after deployment should produce an allowlist of known benign sources
 
 ## Cross-references
 
-- [`100270-new-service.md`](./100270-new-service.md) — companion persistence-via-service rule
-- [`../docs/roadmap.md`](../docs/roadmap.md) — WMI / cmdlet-only persistence detection
+- [`100270-new-service.md`](./100270-new-service.md) — companion persistence rule (service-based)
+- [`../docs/roadmap.md`](../docs/roadmap.md) — task-scheduler channel ingestion
