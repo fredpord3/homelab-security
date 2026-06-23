@@ -31,8 +31,8 @@ Two field constraints on the Sysmon EventID 10 (`ProcessAccess`) parent:
 |---|---|---|
 | `0x1010` | `PROCESS_VM_READ \| PROCESS_QUERY_LIMITED_INFORMATION` | Minimal read access — used by minidump-style tools |
 | `0x1410` | `0x1010` + `PROCESS_QUERY_INFORMATION` | Common Mimikatz pattern |
-| `0x1438` | procdump's default | Stock procdump on lsass |
-| `0x143A` | procdump + extra rights | Some procdump variants / forks |
+| `0x1438` | VM_READ + query rights | Mask commonly observed in credential-dump tooling |
+| `0x143A` | VM_READ + extended query rights | Variant observed in some dumper implementations |
 | `0x1FFFFF` | `PROCESS_ALL_ACCESS` | Sledgehammer; trips on legitimate AV but worth alerting on for visibility |
 
 ## Why these specific masks
@@ -56,12 +56,9 @@ Expected behaviour with Defender off:
 
 🟡 Cannot exercise on Freddy-PC:
 
-- **Defender ASR rule `9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2`** (Block credential stealing from the Windows local security authority subsystem) preempts the open-handle call
-- **Credential Guard** (enabled by default on Win11 Pro with VBS) virtualizes LSASS secrets away from user-mode memory
+- **Defender ASR rule for credential stealing from the Windows local security authority subsystem** preempts the open-handle call
 
 This is the *intended* end-state for a production endpoint. Validation requires the Range VLAN VM with Defender disabled, Credential Guard off, and procdump available — tracked in [`../docs/roadmap.md`](../docs/roadmap.md).
-
-Stock 92065 *has* been observed firing on Freddy-PC against `lsass.exe` from legitimate sources (Windows Defender, Sysmon itself) — confirming the parent rule and the field extraction. The custom rule does not fire on these because the grantedAccess masks do not match (Defender uses `0x1000` / `0x1400` without the VM_READ bit).
 
 ## Tuning notes
 
