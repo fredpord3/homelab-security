@@ -78,7 +78,3 @@ See `network/` for VLAN design + topology diagram.
 - A single invalid rule option (e.g. `different_destination_port`) causes the *entire* `local_rules.xml` to fail to load rather than skipping the bad rule — silently disabling every custom detection
 - UniFi UDR7 syslog uses CEF format with `program_name="CEF"` and `hostname="Dream-Router-7-FP"`; stock decoders do not match, custom decoder required
 - Lynis baseline audits: Proxmox 65/100, Wazuh 62/100; rkhunter clean on both; FIM configured on `/etc`, `/usr/bin`, `/usr/sbin`, `/bin`, `/sbin`, `/boot` — covering credential surfaces (`/etc/passwd`, `/etc/shadow`, `/etc/ssh`), all binary directories, and the boot partitionetc/shadow` to catch tampering with credential and access-control surfaces
-
-## Author
-
-Frederick Pordum III — Mercyhurst University (B.S. Cybersecurity, B.A. Business Management, May 2025) — targeting SOC analyst and detection engineering roles.
