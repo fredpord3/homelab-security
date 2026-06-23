@@ -1,1 +1,88 @@
+<!--
+  Custom decoder for UniFi UDR7 firewall syslog (CEF format).
+  
+  Background:
+    The UDR7 sends syslog with program_name="CEF" and
+    hostname="Dream-Router-7-FP". Wazuh's stock decoders do not
+    match because none of them target program_name="CEF" — they
+    target named appliance formats (Fortinet, Palo Alto, etc.).
+  
+  Strategy:
+    1. A parent decoder matches on program_name=="CEF".
+    2. A child decoder extracts CEF header fields and the
+       extension key=value pairs that follow.
+    3. A pre-decoding override sets the hostname so downstream
+       rules can filter by source device.
+  
+  CEF format reference:
+    CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|Extension
+  
+  Sample event (see ./unifi-fw-samples.md for more):
+    CEF:0|Ubiquiti|UniFi|7.x|FW_BLOCK|Firewall Block|5|
+        src=192.168.30.55 spt=51234 dst=192.168.20.20 dpt=22
+        proto=TCP act=block in=eth1 out=eth2
+-->
 
+<decoder name="unifi-fw">
+  <program_name>^CEF$</program_name>
+</decoder>
+
+<decoder name="unifi-fw-header">
+  <parent>unifi-fw</parent>
+  <prematch>^CEF:\d+\|</prematch>
+  <regex offset="after_prematch">^([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|(\d+)\|</regex>
+  <order>vendor,product,version,signature_id,event_name,severity</order>
+</decoder>
+
+<!--
+  Extension key=value extractor. UDR7 ships ASCII k=v pairs after the
+  CEF header. Wazuh's <type>kv</type> mode handles this cleanly.
+-->
+<decoder name="unifi-fw-extension">
+  <parent>unifi-fw</parent>
+  <type>kv</type>
+  <prematch offset="after_parent">\w+=</prematch>
+  <regex offset="after_parent">(\w+)=(\S+)</regex>
+  <order>name,value</order>
+</decoder>
+
+<!--
+  Field aliases — map UDR7's CEF key names to Wazuh's canonical
+  field names so existing rules (which use srcip / dstport / etc.)
+  fire correctly without rewrites.
+-->
+<decoder name="unifi-fw-aliases">
+  <parent>unifi-fw</parent>
+  <regex>src=(\S+)</regex>
+  <order>srcip</order>
+</decoder>
+
+<decoder name="unifi-fw-srcport">
+  <parent>unifi-fw</parent>
+  <regex>spt=(\d+)</regex>
+  <order>srcport</order>
+</decoder>
+
+<decoder name="unifi-fw-dstip">
+  <parent>unifi-fw</parent>
+  <regex>dst=(\S+)</regex>
+  <order>dstip</order>
+</decoder>
+
+<decoder name="unifi-fw-dstport">
+  <parent>unifi-fw</parent>
+  <regex>dpt=(\d+)</regex>
+  <order>dstport</order>
+</decoder>
+
+<decoder name="unifi-fw-proto">
+  <parent>unifi-fw</parent>
+  <regex>proto=(\w+)</regex>
+  <order>protocol</order>
+</decoder>
+
+<decoder name="unifi-fw-action">
+  <parent>unifi-fw</parent>
+  <regex>act=(\w+)</regex>
+  <order>action</order>
+</decoder>
