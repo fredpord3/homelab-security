@@ -6,16 +6,16 @@
 
 | ID | Name | Tactic | Technique | Status | Writeup |
 |---|---|---|---|---|---|
-| 100200 | Internal port scan | Discovery | T1046 | 🟡 Logic deployed, awaiting Range VLAN | [100200-port-scan.md](./100200-port-scan.md) |
-| 100210 | Encoded PowerShell | Execution / Defense Evasion | T1059.001, T1027 | ✅ Validated firing | [100210-ps-encoded.md](./100210-ps-encoded.md) |
-| 100220 | Defender tampering | Defense Evasion | T1562.001 | 🟡 Blocked by Defender ASR on Freddy-PC | [100220-defender-tampering.md](./100220-defender-tampering.md) |
-| 100230 | LSASS process access | Credential Access | T1003.001 | 🟡 Blocked by Defender ASR; awaits Range VM | [100230-lsass-access.md](./100230-lsass-access.md) |
-| 100240 | Internal SSH brute force | Credential Access / Lateral Movement | T1110.001, T1021.004 | ✅ Validated firing | [100240-ssh-brute-force.md](./100240-ssh-brute-force.md) |
-| 100250 | LOLBin abuse | Defense Evasion / Execution | T1218, T1105 | 🟡 Partially validated; ASR-preempted on some binaries | [100250-lolbin-abuse.md](./100250-lolbin-abuse.md) |
-| 100260 | Suspicious scheduled task | Persistence | T1053.005 | ✅ Validated firing | [100260-suspicious-schtask.md](./100260-suspicious-schtask.md) |
-| 100270 | New Windows service | Persistence | T1543.003 | ✅ Validated firing | [100270-new-service.md](./100270-new-service.md) |
-| 100280 | Critical service stop | Defense Evasion / Impact | T1562.001, T1489 | ✅ Validated firing (EventLog test stop) | [100280-service-stop.md](./100280-service-stop.md) |
-| 100290 | PowerShell download cradle | Ingress Tool Transfer / Execution | T1105, T1059.001 | 🟡 Blocked by Defender ASR; awaits Range VM | [100290-ps-download-cradle.md](./100290-ps-download-cradle.md) |
+| 100200 | Internal port scan | Discovery | T1046 | 🟡 Deployed, awaiting Range VLAN attacker | [100200-port-scan.md](./100200-port-scan.md) |
+| 100210 | Encoded PowerShell | Execution / Defense Evasion | T1059.001, T1027 | 🟡 Deployed, validation in progress | [100210-ps-encoded.md](./100210-ps-encoded.md) |
+| 100220 | Defender tampering | Defense Evasion | T1562.001 | 🟡 Deployed; Defender ASR preempts on Freddy-PC | [100220-defender-tampering.md](./100220-defender-tampering.md) |
+| 100230 | LSASS process access | Credential Access | T1003.001 | 🟡 Deployed; Defender ASR preempts; awaits Range VM | [100230-lsass-access.md](./100230-lsass-access.md) |
+| 100240 | Internal SSH brute force | Credential Access / Lateral Movement | T1110.001, T1021.004 | 🟡 Deployed, validation in progress | [100240-ssh-brute-force.md](./100240-ssh-brute-force.md) |
+| 100250 | LOLBin abuse | Defense Evasion / Execution | T1218, T1105 | 🟡 Deployed; ASR preempts some binaries | [100250-lolbin-abuse.md](./100250-lolbin-abuse.md) |
+| 100260 | Suspicious scheduled task | Persistence | T1053.005 | 🟡 Deployed, validation in progress | [100260-suspicious-schtask.md](./100260-suspicious-schtask.md) |
+| 100270 | New Windows service | Persistence | T1543.003 | 🟡 Deployed, validation in progress | [100270-new-service.md](./100270-new-service.md) |
+| 100280 | Critical service stop | Defense Evasion / Impact | T1562.001, T1489 | 🟡 Deployed, validation in progress | [100280-service-stop.md](./100280-service-stop.md) |
+| 100290 | PowerShell download cradle | Ingress Tool Transfer / Execution | T1105, T1059.001 | 🟡 Deployed; Defender ASR preempts; awaits Range VM | [100290-ps-download-cradle.md](./100290-ps-download-cradle.md) |
 
 ## MITRE ATT&CK coverage
 
