@@ -1,1 +1,96 @@
-test
+# Decoders
+
+Custom Wazuh decoders for log formats that Wazuh's stock ruleset does not parse. Decoders run *before* rules — they extract structured fields from raw log lines so rules can match on `srcip`, `dstport`, etc. rather than against the raw string.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| [`unifi-fw.xml`](./unifi-fw.xml) | Custom CEF decoder for UniFi UDR7 firewall syslog |
+
+## Why custom decoders are needed here
+
+Wazuh ships with decoders for most major appliance log formats (Fortinet, Palo Alto, Cisco ASA, etc.) but **not** for Ubiquiti / UniFi. The UDR7 emits syslog in CEF (Common Event Format), but CEF is a *meta-format* — vendors that use it still pick their own field semantics. None of Wazuh's shipped CEF-aware decoders match on `program_name="CEF"` with Ubiquiti's specific extension keys, so the events would land in `archives.log` as undecoded strings, invisible to rules.
+
+The custom decoder in this folder fixes that for the UDR7's firewall log channel.
+
+## Field-mapping strategy
+
+The decoder maps UDR7's CEF extension keys to Wazuh's **canonical field names** (`srcip`, `dstip`, `srcport`, `dstport`, `protocol`, `action`) so that existing stock rules and the custom rules in [`../local_rules.xml`](../local_rules.xml) can match on them without bespoke field references.
+
+Concretely:
+
+| UDR7 CEF key | Wazuh canonical field |
+|---|---|
+| `src` | `srcip` |
+| `dst` | `dstip` |
+| `spt` | `srcport` |
+| `dpt` | `dstport` |
+| `proto` | `protocol` |
+| `act` | `action` |
+
+This is what allows rule 100200 (internal port scan) to use the stock `<different_dstport />` correlation modifier — that modifier expects a field literally named `dstport`, and would not work if the decoder left the field named `dpt`.
+
+See [`../unifi-fw-samples.md`](../unifi-fw-samples.md) for raw sample events, full field-mapping notes, and gaps in coverage (e.g. CyberSecure IDS hits, GeoIP enrichment).
+
+## Deploying a decoder
+
+Decoders in this folder need to be copied to the Wazuh manager at:
+
+```
+/var/ossec/etc/decoders/local_decoder.xml
+```
+
+or as separately-named files in `/var/ossec/etc/decoders/` (the manager loads every `*.xml` in that directory at startup). For this lab, the convention is one file per source device — easier to grep, easier to disable a specific one without surgical edits to a combined file.
+
+After deploying:
+
+```bash
+# Validate parse before restarting (won't actually load — just tests syntax)
+sudo /var/ossec/bin/wazuh-analysisd -t
+
+# Restart to load
+sudo systemctl restart wazuh-manager
+
+# Confirm the decoder is loaded
+sudo grep -i "unifi-fw" /var/ossec/logs/ossec.log
+```
+
+## Testing a decoder
+
+`wazuh-logtest` is the canonical tool. It loads the full ruleset + decoders, then takes a raw log line on stdin and reports which decoder claimed it and which rule (if any) fired.
+
+```bash
+sudo /var/ossec/bin/wazuh-logtest
+# Paste a raw log line (the part after the syslog timestamp/hostname prefix), then Enter.
+# Example for the UDR7:
+#   CEF:0|Ubiquiti|UniFi|7.x|FW_BLOCK|Firewall Block|5|src=192.168.30.55 spt=51234 dst=192.168.20.20 dpt=22 proto=TCP act=block
+```
+
+Expected output should show:
+
+- `decoder.name: unifi-fw`
+- Extracted fields (`srcip`, `dstip`, `srcport`, `dstport`, `protocol`, `action`)
+- If correlation conditions are met within the same logtest session, the matched rule
+
+Sample raw events for paste-testing are in [`../unifi-fw-samples.md`](../unifi-fw-samples.md).
+
+## Failure modes seen during decoder development
+
+1. **`program_name` mismatch** — the UDR7's syslog header has `program_name=CEF` (not `unifi`, not `udr`, not `ubiquiti`). The parent decoder's `<program_name>` regex must match this exactly. Initial attempts at `<program_name>^unifi$</program_name>` matched nothing.
+
+2. **Field-extraction order matters** — the `unifi-fw-header` decoder extracts the pipe-delimited CEF header (vendor, product, etc.), and `unifi-fw-extension` extracts the trailing `k=v` pairs. Both are children of `unifi-fw`. Wazuh runs all child decoders against a matched parent's event — but order in the file determines which extracted fields survive if two child decoders try to set the same field name. Keep the alias decoders (`unifi-fw-aliases`, etc.) last.
+
+3. **Wazuh doesn't reload decoders on `kill -HUP`** — a full `systemctl restart wazuh-manager` is required after decoder changes. The HUP signal reloads rules but not decoders.
+
+## Adding a new decoder
+
+If a new appliance or log source needs custom decoding:
+
+1. Capture 5–10 raw samples from `/var/ossec/logs/archives/archives.log` covering different event subtypes
+2. Add a `<decoder name="...">` parent matching the `program_name` or `<prematch>` pattern that uniquely identifies the source
+3. Add child decoders (one per field cluster) under that parent
+4. Map fields to Wazuh canonical names where possible (`srcip` not `source_address`, etc.) — this maximises rule reuse
+5. Test with `wazuh-logtest` against each captured sample
+6. Document the field mapping in a sibling `<source>-samples.md` file
+7. Update this README's "Files" table
