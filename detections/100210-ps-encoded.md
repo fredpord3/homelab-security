@@ -47,7 +47,7 @@ Expected behaviour:
 
 ## Observed status
 
-✅ Confirmed firing on Freddy-PC, 2025-12 — see `screenshots/100210-firing.png`.
+✅ Confirmed firing on Freddy-PC — see `screenshots/100210-firing.png`.
 
 ```bash
 $ sudo grep '"rule":{"level":12,"description":"PowerShell launched with -EncodedCommand' \
