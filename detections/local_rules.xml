@@ -1,9 +1,9 @@
 This XML file does not appear to have any style information associated with it. The document tree is shown below.
-<!-- 
+<!--
   homelab-security custom rules
   ============================================================================
   ID range: 100100, 100200-100299 (per Wazuh custom-rule convention, > 100000)
-  
+
   All <if_sid> / <if_group> values verified against the installed Wazuh 4.14.5
   ruleset at /var/ossec/ruleset/rules/. Stock-coverage analysis completed
   before authoring these rules — see ../docs/findings.md finding #10 for the
@@ -33,7 +33,7 @@ This XML file does not appear to have any style information associated with it. 
        =====================================================================  -->
 <rule id="100100" level="0">
 <decoded_as>unifi-fw</decoded_as>
-<field name="action">block</field>
+<action>block</action>
 <description>UDR7 firewall block (base rule, no alert).</description>
 <group>unifi-fw,firewall,</group>
 </rule>
@@ -122,12 +122,12 @@ This XML file does not appear to have any style information associated with it. 
 <!--  =====================================================================
        100270 — New Windows service (Persistence / T1543.003)
        Parent: 61138 (stock: "New Windows Service Created", Security 7045)
-       
+
        Rationale: An earlier draft of this rule chained off sysmon_event1
        against sc.exe, which missed any service created via PowerShell
        New-Service or direct SCM API calls. Tiering on 61138 (which fires on
        Security channel EventID 7045) catches every service install path.
-       
+
        Stock 61138 is level 5 (mostly informational because Windows installers
        create services routinely). This rule promotes to level 10 to surface
        for triage. Future tuning will add field filters on imagePath patterns
@@ -147,11 +147,11 @@ This XML file does not appear to have any style information associated with it. 
        Parent: 60002 (stock: System channel base rule)
        Match: EventID 7036 + message indicates "entered the stopped state"
               for a service on the security-relevant watchlist.
-       
+
        Stock Wazuh ships rules for SOME service stops (e.g. Software Protection
        in 0585-win-application_rules.xml) but no generic SCM 7036 watchlist
        rule. This is a genuine gap.
-       
+
        Watchlist intentionally tight: stopping any of these is rarely benign
        on a monitored endpoint.
        =====================================================================  -->
