@@ -55,7 +55,7 @@ Expected sequence:
 
 ## Observed status
 
-✅ Confirmed firing 2025-12 during fail2ban tuning. Three things happened concurrently as expected:
+✅ Confirmed firing during fail2ban tuning. Three things happened concurrently as expected:
 
 - `alerts.json` recorded both 5712 (level 10) and 100240 (level 12)
 - `fail2ban-client status sshd` showed the test source IP in the banned list
