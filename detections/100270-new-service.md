@@ -4,62 +4,66 @@
 |---|---|
 | Rule ID | 100270 |
 | Level | 10 |
-| MITRE technique | [T1543.003 — Create or Modify System Process: Windows Service](https://attack.mitre.org/techniques/T1543/003/) |
+| MITRE technique | [T1543.003 — Windows Service](https://attack.mitre.org/techniques/T1543/003/) |
 | Tactic | TA0003 Persistence |
-| Parent rule | 92052 (Sysmon EventID 1 — process create) |
-| Telemetry | Sysmon `Microsoft-Windows-Sysmon/Operational` |
-| Status | ✅ Validated firing |
+| Parent rule | 61138 (stock: "New Windows Service Created", fires on Security/System channel EventID 7045) |
+| Telemetry | Windows System channel EventID 7045 |
+| Status | 🟡 Deployed, validation in progress |
 
 ## Detection logic
 
 ```xml
 <rule id="100270" level="10">
-  <if_sid>92052</if_sid>
-  <field name="win.eventdata.image" type="pcre2">(?i)\\sc\.exe$</field>
-  <field name="win.eventdata.commandLine" type="pcre2">(?i)sc(\.exe)?\s+(\\\\[^\s]+\s+)?create\s</field>
-  <description>New Windows service created via sc.exe.</description>
+  <if_sid>61138</if_sid>
+  <description>New Windows service installed (Security 7045) — triage required.</description>
   <mitre><id>T1543.003</id></mitre>
 </rule>
 ```
 
-Three constraints:
+## Why tier on 61138 instead of Sysmon EventID 1 against sc.exe
 
-1. **Image is `sc.exe`** — anchored on backslash + filename
-2. **Command line starts with `sc[.exe] create`** — the `(\\\\[^\s]+\s+)?` accommodates the remote-target form (`sc \\target create ...`) which is itself a strong lateral-movement signal
-3. **Stock 92052 parent** for log-channel normalization
+An earlier draft of this rule chained off `sysmon_event1` filtered on `sc.exe`. That missed every other path to service installation:
 
-## Companion telemetry: Security 7045
+| Service install path | Sysmon-on-sc.exe rule? | EventID 7045 rule? |
+|---|---|---|
+| `sc.exe create Foo binPath=...` | ✅ catches | ✅ catches |
+| PowerShell `New-Service` | ❌ misses (no sc.exe spawn) | ✅ catches |
+| Direct SCM API call from C/C++ malware | ❌ misses | ✅ catches |
+| MSI installer creating a service | ❌ misses | ✅ catches |
 
-The Windows Security channel also emits **Event 7045 ("A service was installed in the system")** when a new service is created — whether via sc.exe, the SCM API, PowerShell `New-Service`, or third-party installers. The current rule only catches the sc.exe path; rule **100270-companion** (a future addition tracked in [`../docs/roadmap.md`](../docs/roadmap.md)) would chain off the Security channel parent to catch the cmdlet path and API-direct path. For now, 100270 sees the most common attacker path (sc.exe) but not the most stealthy one.
+Security/System channel EventID 7045 fires for ALL service installations regardless of the API used to create them. That makes 61138 the strictly better parent.
+
+## Stock 61138 context
+
+Stock 61138 is level 5 (informational) because Windows installers, drivers, and Microsoft Update routinely install services and the noise floor would be intolerable at higher severity. Promoting to level 10 in 100270 surfaces the events for triage without making them critical-alert noisy. The expected workflow is "review new services daily, allowlist known benign sources" rather than "page on every new service."
 
 ## Test methodology
 
 ```cmd
-:: Create — should fire 100270
+:: Create — should fire 100270 via 61138
 sc create Updater100270 binPath= "cmd.exe /c echo 100270 test" start= demand
 
-:: Cleanup (does NOT fire 100270 — only "create" matches)
+:: Also test PowerShell path (the gap that motivated the rewrite)
+:: This SHOULD also fire 100270 now that we tier on 61138
+powershell -c "New-Service -Name Updater100270PS -BinaryPathName 'cmd.exe /c echo test'"
+
+:: Cleanup
 sc delete Updater100270
+sc delete Updater100270PS
 ```
 
 ## Observed status
 
 Rule deployed and parse-validated. End-to-end validation in progress.
 
-The binPath field is preserved through to the alert and is the most useful triage field — it often reveals the attacker's actual payload location.## Observed status
-
-Rule deployed and parse-validated. End-to-end validation in progress.
-
-The binPath field is preserved through to the alert and is the most useful triage field — it often reveals the attacker's actual payload location.
-
 ## Tuning notes
 
-- **Legitimate noise sources** — Windows installers, MSI packages, and driver installs create services routinely. The level-10 setting and the lack of further constraints (no SYSTEM filter, no path filter) means this rule WILL generate baseline noise from legitimate sources. That's deliberate for the lab — the first week of alerts becomes the allowlist input. In a production environment, layering with binPath-pattern allowlists (signed Microsoft binaries from `System32`, etc.) would be appropriate before promoting to level 12+
-- **Remote service creation** — `sc \\target create` is a textbook lateral-movement pattern; the regex captures it. Worth bumping the level for the remote-target variant via a sub-rule, future work
-- **PowerShell `New-Service` path is uncovered** — that path doesn't spawn `sc.exe` and so doesn't match. Companion rule needed (see roadmap)
+- **Heavy baseline noise expected** — Windows installs services routinely. The first week of deployment is a baseline-gathering exercise; persistent benign sources (Microsoft updates, signed installers from `%ProgramFiles%`) get allowlisted in a higher-ID rule with `<options>no_log</options>` to suppress
+- **Future enhancement: field filter on imagePath** — Filtering on suspicious imagePath patterns (`\Temp\`, `\AppData\`, script interpreters as the service binary) would let the rule sit at level 12+ without baseline allowlisting. The field name (`win.eventdata.imagePath` vs `win.eventdata.binaryPath` vs another variant) needs verification against a live alert before adding this filter. Tracked in [`../docs/roadmap.md`](../docs/roadmap.md)
+- **Remote service creation (`sc \\target create`)** — would still trigger this rule because Windows logs EventID 7045 on the target. Worth tightening with a sub-rule that bumps severity when the service was installed remotely
 
 ## Cross-references
 
-- [`100260-suspicious-schtask.md`](./100260-suspicious-schtask.md) — companion persistence rule
-- [`100280-service-stop.md`](./100280-service-stop.md) — the inverse: detecting service *stops* (often related to defense evasion)
-- [`../docs/roadmap.md`](../docs/roadmap.md) — Security 7045 companion rule
+- [`100260-suspicious-schtask.md`](./100260-suspicious-schtask.md) — companion persistence rule (scheduled tasks)
+- [`100280-service-stop.md`](./100280-service-stop.md) — the inverse: detecting service stops
+- [`../docs/roadmap.md`](../docs/roadmap.md) — imagePath field-name verification
