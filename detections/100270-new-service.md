@@ -44,9 +44,13 @@ sc delete Updater100270
 
 ## Observed status
 
-✅ Confirmed firing — same test run as 100260.
+Rule deployed and parse-validated. End-to-end validation in progress.
 
-The single Sysmon EventID 1 from the `sc create` invocation triggered both stock 92052 and custom 100270. Alert recorded in `alerts.json` with the full binPath visible, which is useful for triage — the binPath often reveals the attacker's actual payload location.
+The binPath field is preserved through to the alert and is the most useful triage field — it often reveals the attacker's actual payload location.## Observed status
+
+Rule deployed and parse-validated. End-to-end validation in progress.
+
+The binPath field is preserved through to the alert and is the most useful triage field — it often reveals the attacker's actual payload location.
 
 ## Tuning notes
 
