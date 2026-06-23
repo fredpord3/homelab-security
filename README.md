@@ -57,9 +57,9 @@ See `network/` for VLAN design + topology diagram.
 | Wazuh manager + indexer + dashboard | ✅ Production |
 | Endpoint agents (Win11, Ubuntu, Proxmox) | ✅ Enrolled, active |
 | Sysmon telemetry pipeline | ✅ Validated end-to-end (897+ events from Freddy-PC) |
-| Stock Wazuh detections | ✅ Validated (5710, 5712, 5503, 5551, 92057, 92900 confirmed firing) |
-| Custom rules deployed | ✅ 10 rules in `local_rules.xml` |
-| Custom rules validated firing | 🟡 In progress (methodology + status documented per rule) |
+| Stock Wazuh detections | ✅ Validated (5710, 5712, 5503, 5551, 92057, 92900 confirmed firing per initial baseline) |
+| Custom rules deployed | ✅ 10 rules in `local_rules.xml`, parse-validated via wazuh-logtest |
+| Custom rules end-to-end validated | 🟡 In progress (methodology + per-rule status documented) |
 | UniFi firewall decoder | 🟡 Partial (UDR7 CEF format requires further field extraction) |
 | Range VLAN detonation VM | ⏳ Planned (required to validate ASR-blocked techniques) |
 
