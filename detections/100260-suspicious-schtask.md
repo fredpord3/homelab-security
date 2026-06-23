@@ -1,67 +1,69 @@
-# 100260 — Suspicious scheduled task
+# 100270 — New Windows service
 
 | Field | Value |
 |---|---|
-| Rule ID | 100260 |
-| Level | 11 |
-| MITRE technique | [T1053.005 — Scheduled Task/Job](https://attack.mitre.org/techniques/T1053/005/) |
+| Rule ID | 100270 |
+| Level | 10 |
+| MITRE technique | [T1543.003 — Windows Service](https://attack.mitre.org/techniques/T1543/003/) |
 | Tactic | TA0003 Persistence |
-| Parent group | `sysmon_event1` (Sysmon EventID 1, process create) |
-| Telemetry | Sysmon `Microsoft-Windows-Sysmon/Operational` |
+| Parent rule | 61138 (stock: "New Windows Service Created", fires on Security/System channel EventID 7045) |
+| Telemetry | Windows System channel EventID 7045 |
 | Status | 🟡 Deployed, validation in progress |
 
 ## Detection logic
 
 ```xml
-<rule id="100260" level="11">
-  <if_group>sysmon_event1</if_group>
-  <field name="win.eventdata.image" type="pcre2">(?i)\\schtasks\.exe$</field>
-  <field name="win.eventdata.commandLine" type="pcre2">(?i)\/create.*(\/sc\s+(onlogon|onstart)|\/ru\s+(system|highest)|\/tr.*(powershell|cmd|wscript|cscript|rundll32))</field>
-  <description>Suspicious scheduled task created.</description>
-  <mitre><id>T1053.005</id></mitre>
+<rule id="100270" level="10">
+  <if_sid>61138</if_sid>
+  <description>New Windows service installed (Security 7045) — triage required.</description>
+  <mitre><id>T1543.003</id></mitre>
 </rule>
 ```
 
-Two field constraints — the first identifying the binary, the second a disjunction over three suspicious-action signals:
+## Why tier on 61138 instead of Sysmon EventID 1 against sc.exe
 
-| Signal | Why suspicious |
-|---|---|
-| `/sc onlogon` or `/sc onstart` | Boot/login persistence triggers |
-| `/ru system` or `/ru highest` | Running as SYSTEM or with elevated privileges |
-| `/tr <interpreter>` | Action target is a script interpreter rather than a normal executable |
+An earlier draft of this rule chained off `sysmon_event1` filtered on `sc.exe`. That missed every other path to service installation:
 
-OR'd together because a real attacker task usually hits two or more, but the rule fires on any one to catch lighter-weight persistence attempts.
+| Service install path | Sysmon-on-sc.exe rule? | EventID 7045 rule? |
+|---|---|---|
+| `sc.exe create Foo binPath=...` | ✅ catches | ✅ catches |
+| PowerShell `New-Service` | ❌ misses (no sc.exe spawn) | ✅ catches |
+| Direct SCM API call from C/C++ malware | ❌ misses | ✅ catches |
+| MSI installer creating a service | ❌ misses | ✅ catches |
 
-## Stock-coverage check
+Security/System channel EventID 7045 fires for ALL service installations regardless of the API used to create them. That makes 61138 the strictly better parent.
 
-Reviewed `0800-sysmon_id_1.xml`. Stock has rules for various Sysmon EventID 1 patterns but no schtasks.exe-specific detection. Custom rule fills a genuine gap.
+## Stock 61138 context
+
+Stock 61138 is level 5 (informational) because Windows installers, drivers, and Microsoft Update routinely install services and the noise floor would be intolerable at higher severity. Promoting to level 10 in 100270 surfaces the events for triage without making them critical-alert noisy. The expected workflow is "review new services daily, allowlist known benign sources" rather than "page on every new service."
 
 ## Test methodology
 
 ```cmd
-:: Should fire (/sc onlogon trigger + powershell as action)
-schtasks /create /tn "Updater_100260_test" /tr "powershell.exe -nop -c 'Write-Host 100260'" /sc onlogon /f
+:: Create — should fire 100270 via 61138
+sc create Updater100270 binPath= "cmd.exe /c echo 100270 test" start= demand
+
+:: Also test PowerShell path (the gap that motivated the rewrite)
+:: This SHOULD also fire 100270 now that we tier on 61138
+powershell -c "New-Service -Name Updater100270PS -BinaryPathName 'cmd.exe /c echo test'"
 
 :: Cleanup
-schtasks /delete /tn "Updater_100260_test" /f
+sc delete Updater100270
+sc delete Updater100270PS
 ```
 
 ## Observed status
 
 Rule deployed and parse-validated. End-to-end validation in progress.
 
-## Known coverage gaps in this rule
-
-- **PowerShell `Register-ScheduledTask` path is NOT covered** — that cmdlet uses WMI under the hood and may not spawn schtasks.exe, so the rule misses it. Adding coverage for `Microsoft-Windows-TaskScheduler/Operational` EventID 106 would close this gap. Tracked in [`../docs/roadmap.md`](../docs/roadmap.md).
-- **Pure-WMI task creation is also missed** — same root cause as above
-- **Scheduled task deletion (T1070.006 — covering tracks) is not covered** — a future companion rule against `/delete` patterns would catch audit-trail tampering
-
 ## Tuning notes
 
-- **Level 11, not higher** — scheduled-task creation is a legitimate admin operation. Level 11 routes it to the medium-severity bucket for triage; a false positive at level 13 would be more disruptive than the rule is worth
-- **`/ru system` false positives expected from Microsoft installers** — Office and Edge updaters occasionally create SYSTEM-run tasks. Baseline review after deployment should produce an allowlist of known benign sources
+- **Heavy baseline noise expected** — Windows installs services routinely. The first week of deployment is a baseline-gathering exercise; persistent benign sources (Microsoft updates, signed installers from `%ProgramFiles%`) get allowlisted in a higher-ID rule with `<options>no_log</options>` to suppress
+- **Future enhancement: field filter on imagePath** — Filtering on suspicious imagePath patterns (`\Temp\`, `\AppData\`, script interpreters as the service binary) would let the rule sit at level 12+ without baseline allowlisting. The field name (`win.eventdata.imagePath` vs `win.eventdata.binaryPath` vs another variant) needs verification against a live alert before adding this filter. Tracked in [`../docs/roadmap.md`](../docs/roadmap.md)
+- **Remote service creation (`sc \\target create`)** — would still trigger this rule because Windows logs EventID 7045 on the target. Worth tightening with a sub-rule that bumps severity when the service was installed remotely
 
 ## Cross-references
 
-- [`100270-new-service.md`](./100270-new-service.md) — companion persistence rule (service-based)
-- [`../docs/roadmap.md`](../docs/roadmap.md) — task-scheduler channel ingestion
+- [`100260-suspicious-schtask.md`](./100260-suspicious-schtask.md) — companion persistence rule (scheduled tasks)
+- [`100280-service-stop.md`](./100280-service-stop.md) — the inverse: detecting service stops
+- [`../docs/roadmap.md`](../docs/roadmap.md) — imagePath field-name verification
