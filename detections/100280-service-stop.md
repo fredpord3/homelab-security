@@ -51,11 +51,9 @@ The stop event is recorded in the System channel; SCM emits Event 7036 (service 
 
 ## Observed status
 
-✅ Confirmed firing via the EventLog stop/start test. The alert appeared in `alerts.json` with `rule.id=100280` and `rule.level=12`, with `win.eventdata.serviceName=EventLog` cleanly extracted.
+Rule deployed and parse-validated. End-to-end validation in progress.
 
-Sysmon stop also confirmed (test: `Stop-Service Sysmon64` in elevated PowerShell with Sysmon's own protection disabled for the test).
-
-Wazuh agent stop (`Stop-Service WazuhSvc`) cannot be self-witnessed by definition — the alert is generated on the manager only after the agent reconnects and ships the buffered log line. End-to-end test pending.
+Note: Wazuh agent stop (`Stop-Service WazuhSvc`) cannot be self-witnessed — the alert generates on the manager only after the agent reconnects and ships the buffered log line.
 
 ## Tuning notes
 
