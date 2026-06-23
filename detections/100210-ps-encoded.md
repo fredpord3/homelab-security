@@ -47,14 +47,7 @@ Expected behaviour:
 
 ## Observed status
 
-✅ Confirmed firing on Freddy-PC — see `screenshots/100210-firing.png`.
-
-```bash
-$ sudo grep '"rule":{"level":12,"description":"PowerShell launched with -EncodedCommand' \
-    /var/ossec/logs/alerts/alerts.json | wc -l
-3
-```
-
+Rule deployed and parse-validated via `wazuh-logtest`. End-to-end firing validation against simulated attacks is in progress.
 ## Tuning notes
 
 - **`-e` alone is risky** — operators occasionally use `-e` as a typo or as a custom alias. The 40-char base64 floor mitigates this but if false positives appear, tighten to `-(enc|ec|encodedcommand)`
