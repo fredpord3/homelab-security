@@ -38,7 +38,7 @@ TA0007 Discovery               ████░░░░░░  100200
 TA0002 Execution               ██████████  100210, 100250, 100290
 TA0005 Defense Evasion         ██████████  100210, 100250, 100280
 TA0006 Credential Access       ████░░░░░░  100240
-TA0003 Persistence             ██████████  100260, 100270
+TA0003 Persistence             ██████████  100260
 TA0011 Command & Control       ████░░░░░░  100290
 TA0040 Impact                  ████░░░░░░  100280
 TA0008 Lateral Movement (adj)  ████░░░░░░  100240
