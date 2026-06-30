@@ -10,7 +10,7 @@ Rules live in [`local_rules.xml`](./local_rules.xml). Each rule has a dedicated 
 |---|---|---|---|---|---|
 | 100100 | UDR7 firewall block (base, silent) | — | — | 🟡 Deployed | (helper rule, no writeup) |
 | 100200 | Internal scan/probe | Discovery | T1046 | 🟡 Deployed, awaiting Range VLAN attacker | [100200-port-scan.md](./100200-port-scan.md) |
-| 100210 | Encoded PowerShell | Execution / Defense Evasion | T1059.001, T1027 | 🟡 Deployed, validation in progress | [100210-ps-encoded.md](./100210-ps-encoded.md) |
+| 100210 | Encoded PowerShell | Execution / Defense Evasion | T1059.001, T1027 | 🟢 Verified firing end-to-end on Freddy-PC, 2026-06-30 | [100210-ps-encoded.md](./100210-ps-encoded.md) |
 | 100240 | Internal SSH brute force | Credential Access / Lateral Movement | T1110.001, T1021.004 | 🟢 Verified firing end-to-end 2026-06-30 | [100240-ssh-brute-force.md](./100240-ssh-brute-force.md) |
 | 100250 | LOLBin abuse | Defense Evasion / Execution | T1218, T1105 | 🟡 Deployed; Defender ASR preempts some paths | [100250-lolbin-abuse.md](./100250-lolbin-abuse.md) |
 | 100260 | Suspicious scheduled task | Persistence | T1053.005 | 🟢 Verified firing end-to-end 2026-06-30 | [100260-suspicious-schtask.md](./100260-suspicious-schtask.md) |
