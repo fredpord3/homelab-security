@@ -192,7 +192,7 @@ sudo grep -E '<if_group>sysmon_event1</if_group>' /var/ossec/ruleset/rules/0800-
 sudo grep -rE '7045|7036' /var/ossec/ruleset/rules/
 ```
 
-If stock has it, either skip the custom rule or tier on the stock rule to add a specific signal (the path taken for 100240 on stock 5712, and for 100270 on stock 61138).
+If stock has it, either skip the custom rule or tier on the stock rule to add a specific signal (the path taken for 100240 on stock 5712).
 
 ---
 
@@ -226,4 +226,75 @@ The same effect can be achieved without a custom rule at all by overriding the l
 
 **Lesson:** "Tier on a stock rule to add a custom signal" (the methodology endorsed in finding #10) only adds value when there IS a custom signal. A bare `<if_sid>` with no additional constraints adds zero detection value over the parent. Before committing a tiering rule, ask: "What event would fire the parent but NOT my rule?" If the answer is "none," the rule isn't doing detection work — and the right tool is rule override, not a new rule ID.
 
-This finding came out of a pre-portfolio audit of the custom ruleset. The audit caught two thin tiering rules (100270 here, and 100240 pending live-fire validation against stock 5712) that looked superficially like detection-engineering work but were closer to alert routing. Worth being honest about: writing the audit step into the methodology from the start would have caught these before they were ever committed.
+Contrast with rule 100240, which tiers on stock 5712 (sshd brute force) with one constraint: `<srcip>192.168.0.0/16</srcip>`. That constraint passes the test — external brute force events fire 5712 but NOT 100240, so the rule meaningfully restricts the firing set. The single-constraint pattern is fine when the constraint is real; the problem with 100270 was that the only "constraint" was the level number.
+
+---
+
+## 12. OpenSSH 9.8 split sshd into sshd + sshd-session, breaking the stock Wazuh decoder on Ubuntu 24.04
+
+**Symptom:** Rule 100240 (SSH brute force, internal source) deployed and parse-validated. Generated 12 failed SSH logins against the manager from Freddy-PC. Watched `alerts.json` — nothing. Not 100240, not stock 5712, not even stock 5710 (the per-event "invalid user" rule). Total silence on a textbook brute-force pattern.
+
+**Initial investigation:** Confirmed sshd was logging the failed attempts to journald:
+
+```
+Jun 30 21:43:38 ffwazuh sshd-session[1634886]: Invalid user bogus from 192.168.0.249 port 54797
+Jun 30 21:44:16 ffwazuh sshd-session[1634886]: Failed password for invalid user bogus from 192.168.0.249 port 54797 ssh2
+```
+
+Confirmed Wazuh was ingesting journald (the `<localfile>` block for journald was present in `ossec.conf`). Confirmed events were reaching the manager — they showed up in `archives.json`, just with no decoder match and no rule fired.
+
+**Cause:** OpenSSH 9.8 (released August 2024, shipped in Ubuntu 24.04) split the sshd daemon into two separate binaries:
+
+- `sshd` — the listener / accept loop
+- `sshd-session` — the per-connection process that handles authentication and the session
+
+Auth-related log lines now use `program_name="sshd-session"`, not `sshd`. The stock Wazuh sshd decoder (and every child decoder for "Failed password," "Invalid user," etc.) anchors on `<program_name>sshd</program_name>`. Result: every sshd auth event on Ubuntu 24.04 falls through to the generic decoder, no fields get extracted, no rules fire.
+
+This is a silent failure. Wazuh doesn't emit a warning when a log line fails to match any decoder — it just emits the raw event into `archives.json` (if `logall_json` is enabled) and moves on. From the dashboard, it looks like sshd isn't generating events at all.
+
+Confirmation in `archives.json` — `predecoder.program_name="sshd-session"`, no `decoder` match beyond the generic timestamp parse, no `data` block:
+
+```json
+{
+  "full_log": "Jun 30 21:44:16 ffwazuh sshd-session[1634886]: Failed password for invalid user bogus from 192.168.0.249 port 54797 ssh2",
+  "predecoder": {
+    "program_name": "sshd-session",
+    "timestamp": "Jun 30 21:44:16",
+    "hostname": "ffwazuh"
+  },
+  "location": "journald"
+}
+```
+
+Contrast with the one sshd-tagged line that DID parse correctly during the same window — `sshd[507727]: Timeout before authentication...` — which got the full decoder treatment because its program_name was still `sshd`.
+
+**Fix:** Three lines appended to `/var/ossec/etc/decoders/local_decoder.xml`:
+
+```xml
+<decoder name="sshd">
+  <program_name>^sshd-session$</program_name>
+</decoder>
+```
+
+This adds a second decoder also named `sshd` (Wazuh allows multiple decoder definitions to share a name) which matches the `sshd-session` program_name. Because all the stock sshd child decoders are anchored on `<parent>sshd</parent>`, they now apply to sshd-session log lines unchanged. No child-decoder rewrites needed.
+
+Validation:
+
+```bash
+sudo /var/ossec/bin/wazuh-analysisd -t   # clean parse, exit 0
+sudo systemctl restart wazuh-manager
+```
+
+After restart, re-ran the brute-force test. Stock 5710 fired on each individual "Invalid user" event (level 5), stock 2502 fired on the aggregate (level 10), stock 5712 fired as the correlation trigger (≥8 failures in 120s, internal, level 10), and custom 100240 fired with the level-12 lateral-movement-candidate description. The `data.srcip` field was correctly populated as `192.168.0.249`, allowing 100240's `<srcip>192.168.0.0/16</srcip>` filter to match.
+
+**Lessons:**
+
+1. **Stable upstream signatures aren't actually stable across OS upgrades.** OpenSSH's binary split is invisible to most operators — SSH still works, login attempts still get logged, the logs look the same except for a hyphenated suffix on the program name. A SIEM decoder anchored on an exact program_name match catches none of it.
+
+2. **Silent decoder failure is the worst failure mode in Wazuh.** No error, no warning, no entry in `ossec.log`. The only signal is the absence of expected alerts. Diagnostic path: when a rule won't fire, check `archives.json` FIRST to confirm events are reaching the manager AND being decoded. If `archives.json` shows events with no `decoder.name` beyond `predecoder`, the issue is upstream of any rule.
+
+3. **An earlier wazuh-logtest result was masked by this issue.** A prior session noted "100240 did not fire in wazuh-logtest despite stock 5712 firing." The actual situation was that *both* rules were broken on live traffic because the decoder was broken — wazuh-logtest happened to work because the test fixture used a hand-typed log line with `sshd` instead of `sshd-session`. The earlier "Wazuh 4.14 quirk with cross-file rule references" hypothesis was wrong; the root cause was always the decoder.
+
+4. **Decoder aliasing via duplicate decoder names is a clean fix pattern.** Three lines, no rewriting of stock child decoders, survives Wazuh upgrades cleanly. The same pattern would work for any other future-split binary (e.g. if systemd splits, or if any other daemon's log program_name changes upstream).
+
+The fix is documented in `/var/ossec/etc/decoders/local_decoder.xml` with a comment block explaining the OpenSSH 9.8 context so future-me (or a future operator) doesn't wonder why a single-purpose decoder file exists for one program name.
