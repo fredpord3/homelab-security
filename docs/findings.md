@@ -193,3 +193,37 @@ sudo grep -rE '7045|7036' /var/ossec/ruleset/rules/
 ```
 
 If stock has it, either skip the custom rule or tier on the stock rule to add a specific signal (the path taken for 100240 on stock 5712, and for 100270 on stock 61138).
+
+---
+
+## 11. Tiering on a stock rule without adding filter logic is a severity relabel, not a detection
+
+**Context:** Rule 100270 was authored to detect new Windows service creation (T1543.003) by tiering on stock rule 61138, which already fires on Security/System channel EventID 7045. The intent was to promote the alert from stock 61138's level 5 (informational) to level 10 (medium) to route service-creation events into the triage queue.
+
+**The rule as written:**
+
+```xml
+<rule id="100270" level="10">
+  <if_sid>61138</if_sid>
+  <description>New Windows service installed (Security 7045) — triage required.</description>
+  <mitre><id>T1543.003</id></mitre>
+</rule>
+```
+
+No additional field filters. No imagePath constraint. No exclusions. The rule fires on exactly the same events as 61138 and nothing else.
+
+**The problem:** This isn't a detection. It's a severity relabel. The rule adds zero discriminating logic on top of stock 61138 — every event that fires 61138 also fires 100270, and vice versa. An interviewer asking "what does your rule add over stock 61138?" gets the answer "it sets the level to 10 instead of 5" — which is a configuration change, not detection engineering.
+
+The same effect can be achieved without a custom rule at all by overriding the level on 61138 itself:
+
+```xml
+<rule id="61138" level="10" overwrite="yes">
+  <!-- inherits all stock logic, only level changes -->
+</rule>
+```
+
+**Decision:** Deleted rule 100270 from `local_rules.xml`. Deleted `detections/rules/100270-new-service.md`. A future rule covering this technique requires actual filter logic — the candidates are filtering on suspicious imagePath patterns (`\Temp\`, `\AppData\`, script interpreters as the service binary) and/or filtering on imagePath signature status. The exact field name (`win.eventdata.imagePath` vs `win.eventdata.binaryPath` vs another variant) needs verification against a live 7045 alert before the filter can be authored. Tracked in [`./roadmap.md`](./roadmap.md).
+
+**Lesson:** "Tier on a stock rule to add a custom signal" (the methodology endorsed in finding #10) only adds value when there IS a custom signal. A bare `<if_sid>` with no additional constraints adds zero detection value over the parent. Before committing a tiering rule, ask: "What event would fire the parent but NOT my rule?" If the answer is "none," the rule isn't doing detection work — and the right tool is rule override, not a new rule ID.
+
+This finding came out of a pre-portfolio audit of the custom ruleset. The audit caught two thin tiering rules (100270 here, and 100240 pending live-fire validation against stock 5712) that looked superficially like detection-engineering work but were closer to alert routing. Worth being honest about: writing the audit step into the methodology from the start would have caught these before they were ever committed.
